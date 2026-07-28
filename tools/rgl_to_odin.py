@@ -66,7 +66,15 @@ def main() -> None:
         lines.append(
             f"{name} :: rl.Rectangle{{{number(x)}, {number(y)}, {number(width)}, {number(height)}}}"
         )
-        lines.append(f"{name}_TEXT :: cstring({json.dumps(text)})")
+        # rGuiLayout emits NULL for controls with no text. raygui distinguishes
+        # NULL from "": panels and scroll panels treat any non-NULL pointer as
+        # a request for a header, while lines reserve space for an empty label.
+        if text:
+            lines.append(f"{name}_TEXT :: cstring({json.dumps(text)})")
+        else:
+            # A zero-initialized cstring variable is a real NULL pointer. Odin
+            # does not permit cstring(nil) as a compile-time constant.
+            lines.append(f"{name}_TEXT: cstring")
     lines.append("")
 
     args.output.parent.mkdir(parents=True, exist_ok=True)

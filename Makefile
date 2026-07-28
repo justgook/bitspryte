@@ -61,7 +61,7 @@ SETTINGS_LAYOUT_SOURCE := $(SETTINGS_LAYOUT_DIR)/$(SETTINGS_SECTION).rgl
 STYLE_SOURCE ?= resources/styles/dark.rgs
 ICON_SOURCE ?= resources/icons/bitspryte.rgi
 
-.PHONY: all app check run run-bin generate resources clean layout-edit settings-layout-edit style-edit icons-edit export-raygui-code
+.PHONY: all app check test run run-bin generate resources clean layout-edit settings-layout-edit style-edit icons-edit export-raygui-code
 
 ifeq ($(UNAME_S),Darwin)
 all: app
@@ -75,10 +75,13 @@ generate: $(GENERATED_LAYOUTS)
 
 resources: $(RESOURCE_STAMP)
 
-check: $(GENERATED_LAYOUTS) $(NATIVE_DEPS)
+check: test $(GENERATED_LAYOUTS) $(NATIVE_DEPS)
 	$(Q)$(ODIN) check . \
 		-collection:generated="$(abspath $(GENERATED_DIR))" \
 		$(ODIN_NATIVE_FLAGS)
+
+test:
+	$(Q)$(PYTHON) tools/test_rgl_to_odin.py
 
 ifeq ($(UNAME_S),Darwin)
 run: $(APP_STAMP)
