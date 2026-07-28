@@ -56,7 +56,7 @@ def main() -> None:
         f"// Source: {args.input.as_posix()}",
         f"package {identifier(args.package)}",
         "",
-        'import rl "vendor:raylib/v55"',
+        'import rl "vendor:raylib"',
         "",
         f"REFERENCE_WIDTH :: f32({number(reference[0])})",
         f"REFERENCE_HEIGHT :: f32({number(reference[1])})",

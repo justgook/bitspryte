@@ -7,8 +7,9 @@ import events "./app/events"
 import themes "./app/themes"
 import layout "generated:layout"
 import native "./platform/native_menu"
-import rl "vendor:raylib/v55"
+import rl "vendor:raylib"
 import settings_panel "./ui/settings_panel"
+import smgui "./ui/smgui"
 
 CANVAS_SIZE :: 32
 WINDOW_WIDTH :: 1280
@@ -63,22 +64,48 @@ load_style :: proc(style: c.int) {
 	rl.GuiLoadStyle(resource_path(themes.file_name(theme)))
 }
 
+settings_snapshot :: proc(settings: ^settings_panel.State) -> smgui.Settings_Snapshot {
+	return smgui.Settings_Snapshot{
+		page = settings.page,
+		theme = settings.theme,
+		close_window_key = c.int(settings.close_window_key),
+		save_format = settings.save_format,
+		export_image_format = settings.export_image_format,
+		export_animation_format = settings.export_animation_format,
+		sprite_sheet_format = settings.sprite_sheet_format,
+		recent_items = settings.recent_items,
+		show_full_path = c.int(1) if settings.show_full_path else 0,
+		auto_recovery = c.int(1) if settings.auto_recovery else 0,
+		recovery_interval = settings.recovery_interval,
+		keep_edited = c.int(1) if settings.keep_edited else 0,
+		keep_edited_duration = settings.keep_edited_duration,
+		keep_closed = c.int(1) if settings.keep_closed else 0,
+		keep_closed_duration = settings.keep_closed_duration,
+	}
+}
+
 dispatch_actions :: proc(
 	bus: ^actions.Bus,
 	event_bus: ^events.Bus,
 	image: ^rl.Image,
 	texture: rl.Texture2D,
 	settings: ^settings_panel.State,
+	smgui_layer: ^smgui.State,
 	status: ^cstring,
 ) {
 	for action in actions.items(bus) {
 		switch action.kind {
 		case .Open_Settings:
 			settings_panel.open(settings)
+			smgui.open_settings(smgui_layer, settings_snapshot(settings))
 			events.publish(event_bus, events.make(.Settings_Opened, action.source))
 
 		case .Close_Active_Window:
+			closed := smgui.close(smgui_layer)
 			if settings_panel.close_active(settings) {
+				closed = true
+			}
+			if closed {
 				events.publish(event_bus, events.make(.Active_Window_Closed, action.source))
 			}
 
@@ -100,6 +127,7 @@ dispatch_actions :: proc(
 		case .Set_Theme:
 			settings.theme = c.int(action.int_value)
 			load_style(settings.theme)
+			smgui.sync_settings(smgui_layer, settings_snapshot(settings))
 			status^ = "Application theme changed"
 			event := events.make(.Theme_Changed, action.source)
 			event.int_value = action.int_value
@@ -118,9 +146,55 @@ handle_events :: proc(bus: ^events.Bus) {
 	events.reset(bus)
 }
 
+handle_smgui_events :: proc(layer: ^smgui.State, settings: ^settings_panel.State, bus: ^actions.Bus) {
+	for {
+		event, ok := smgui.poll_event(layer)
+		if !ok {
+			break
+		}
+		switch event.kind {
+		case .Page_Selected:
+			if event.value >= i32(settings_panel.Page.General) && event.value <= i32(settings_panel.Page.Reset) {
+				settings_panel.cancel_shortcut_capture(settings)
+				settings.page = c.int(event.value)
+				smgui.sync_settings(layer, settings_snapshot(settings))
+				fmt.println("[settings] opened page:", settings_panel.Page(settings.page))
+			}
+		case .Theme_Selected:
+			if themes.is_valid(event.value) {
+				actions.post(bus, actions.set_theme(event.value, .User_Interface))
+			}
+		case .Accepted:
+			fmt.println("[settings] OK requested")
+			settings_panel.close_active(settings)
+		case .Apply_Requested:
+			fmt.println("[settings] Apply requested")
+		case .Cancelled:
+			fmt.println("[settings] Cancel requested")
+			settings_panel.close_active(settings)
+		case .Closed:
+			settings_panel.close_active(settings)
+		case .Setting_Changed:
+			if event.field >= i32(settings_panel.Setting_Field.Save_Format) && event.field <= i32(settings_panel.Setting_Field.Keep_Closed_Duration) {
+				settings_panel.apply_field(settings, settings_panel.Setting_Field(event.field), event.value)
+				smgui.sync_settings(layer, settings_snapshot(settings))
+			}
+		case .Shortcut_Capture_Requested:
+			if event.field >= 0 && event.field < 20 {
+				settings_panel.request_shortcut_capture(settings, int(event.field))
+			}
+		case .Page_Action:
+			if event.page >= i32(settings_panel.Page.General) && event.page <= i32(settings_panel.Page.Reset) {
+				fmt.println("[settings] page action:", settings_panel.Page(event.page), event.field)
+			}
+		case .None:
+		}
+	}
+}
+
 main :: proc() {
 	rl.SetConfigFlags({.WINDOW_RESIZABLE})
-	rl.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "BitSpryte — raylib + raygui lab")
+	rl.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "BitSpryte — raylib + SMGUI")
 	defer rl.CloseWindow()
 	rl.SetWindowMinSize(1000, 700)
 	// Disable raylib's default ESC-to-exit behavior. Escape is an ordinary,
@@ -129,8 +203,7 @@ main :: proc() {
 	rl.SetTargetFPS(60)
 	native.install()
 
-	// These files remain editable by rGuiStyler/rGuiIcons and are copied beside
-	// the executable by the Makefile.
+	// The main shell still uses the legacy raygui icon pack during migration.
 	rl.GuiLoadIcons(resource_path("icons/bitspryte.rgi"), false)
 
 	image := rl.GenImageColor(CANVAS_SIZE, CANVAS_SIZE, rl.BLANK)
@@ -141,6 +214,11 @@ main :: proc() {
 
 	tool := c.int(Tool.Pencil)
 	settings := settings_panel.init()
+	smgui_layer := smgui.init(WINDOW_WIDTH, WINDOW_HEIGHT)
+	defer smgui.destroy(&smgui_layer)
+	// Aseprite's proportional pixel font is rendered directly from its sprite
+	// sheet through SMGUI font hooks. The built-in PSF2 font remains fallback.
+	_ = smgui.load_sprite_sheet_font(&smgui_layer, resource_path("fonts/aseprite_font.png"), 2)
 	action_bus: actions.Bus
 	defer actions.destroy(&action_bus)
 	event_bus: events.Bus
@@ -202,10 +280,15 @@ main :: proc() {
 		case .Clear_Canvas: actions.post(&action_bus, actions.make(.Clear_Canvas, .Native_Menu))
 		case .None:
 		}
-		if !settings_panel.captures_keyboard(&settings) && rl.IsKeyPressed(settings.close_window_key) {
+		if settings_panel.captures_keyboard(&settings) {
+			if key := rl.GetKeyPressed(); key != .KEY_NULL {
+				settings_panel.capture_shortcut(&settings, key)
+				smgui.sync_settings(&smgui_layer, settings_snapshot(&settings))
+			}
+		} else if !smgui.captures_keyboard(&smgui_layer) && rl.IsKeyPressed(settings.close_window_key) {
 			actions.post(&action_bus, actions.make(.Close_Active_Window, .Keyboard))
 		}
-		dispatch_actions(&action_bus, &event_bus, &image, texture, &settings, &status)
+		dispatch_actions(&action_bus, &event_bus, &image, texture, &settings, &smgui_layer, &status)
 		handle_events(&event_bus)
 
 		available_zoom := min(
@@ -223,10 +306,15 @@ main :: proc() {
 		}
 
 		mouse := rl.GetMousePosition()
-		settings_captures_mouse := settings_panel.captures_mouse(&settings, mouse)
+		// Preserve capture for the whole frame even when this input closes the
+		// popup, preventing the closing click from reaching controls underneath.
+		smgui_captured_before_update := smgui.captures_mouse(&smgui_layer, mouse)
+		smgui.update(&smgui_layer, c.int(screen_width), c.int(screen_height), mouse)
+		handle_smgui_events(&smgui_layer, &settings, &action_bus)
+		smgui_captures_mouse := smgui_captured_before_update || smgui.captures_mouse(&smgui_layer, mouse)
 		over_canvas := rl.CheckCollisionPointRec(mouse, canvas_rect)
 		paint_tool_active := tool == c.int(Tool.Pencil) || tool == c.int(Tool.Eraser) || tool == c.int(Tool.Brush)
-		painting := !settings_captures_mouse && over_canvas && (rl.IsMouseButtonDown(.RIGHT) || (paint_tool_active && rl.IsMouseButtonDown(.LEFT)))
+		painting := !smgui_captures_mouse && over_canvas && (rl.IsMouseButtonDown(.RIGHT) || (paint_tool_active && rl.IsMouseButtonDown(.LEFT)))
 		if painting {
 			x := c.int((mouse.x - canvas_rect.x) / canvas_zoom)
 			y := c.int((mouse.y - canvas_rect.y) / canvas_zoom)
@@ -281,9 +369,9 @@ main :: proc() {
 		}
 		rl.DrawRectangleLinesEx(canvas_rect, 2, rl.Color{8, 9, 12, 255})
 
-		// The settings window is modeless. Only controls directly beneath it are
-		// locked while the pointer is over the floating window.
-		if settings_captures_mouse {
+		// Floating UI layers are modeless. Only controls directly beneath one are
+		// locked while the pointer is over that layer.
+		if smgui_captures_mouse {
 			rl.GuiLock()
 		}
 
@@ -339,13 +427,12 @@ main :: proc() {
 
 		rl.GuiStatusBar(status_bar, status)
 
-		if settings_captures_mouse {
+		if smgui_captures_mouse {
 			rl.GuiUnlock()
 		}
-		settings_result := settings_panel.draw(&settings)
-		if settings_result.theme_changed {
-			actions.post(&action_bus, actions.set_theme(i32(settings.theme), .User_Interface))
-		}
+
+		// SMGUI owns the complete Settings window and all page content.
+		smgui.draw(&smgui_layer)
 
 		rl.EndDrawing()
 	}

@@ -25,6 +25,8 @@ c 001 3 titledPanel 0 0 100 100 0 Header
             )
             generated = output_path.read_text()
 
+        self.assertIn('import rl "vendor:raylib"', generated)
+        self.assertNotIn('vendor:raylib/v55', generated)
         self.assertIn("emptyPanel_TEXT: cstring", generated)
         self.assertNotIn('emptyPanel_TEXT :: cstring("")', generated)
         self.assertIn('titledPanel_TEXT :: cstring("Header")', generated)

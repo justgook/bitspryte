@@ -1,19 +1,17 @@
-# Settings mock — prototype
+# Settings prototype status
 
-**Question:** Does an Aseprite-style preferences window, with persistent category navigation and a large routed content pane, feel appropriate for BitSpryte?
+The preferences window is now fully rendered by SMGUI:
 
-The screenshot supplied in the conversation is the selected visual direction, so this prototype explores one structure rather than multiple variants.
+- SMGUI owns the shell, navigation, footer actions, and all 18 page forms.
+- Each page has its own C module under `ui/smgui/settings/`.
+- Odin owns the settings values and shortcut binding; C receives copied
+  snapshots and emits semantic field-change events.
+- Files retains its interactive prototype controls.
+- Keyboard Shortcuts retains the flat action/key/context screen. Close Active
+  Window is functional; other bindings and import/export/reset remain mocks.
+- The unfinished categories retain their explicit mock actions.
+- No settings are persisted yet.
 
-Current scope:
-
-- Files and Theme have interactive mock controls.
-- Keyboard Shortcuts is a dedicated flat table screen with search, scrolling, key-cell selection, import/export/reset stubs, and no shortcut submenus. The Close Active Window binding is functional and configurable; other bindings remain mocks.
-- Every category routes to a dedicated page procedure.
-- Every mutation routes to a dedicated logging-only callback.
-- No settings are persisted.
-
-## Verdict
-
-_Pending hands-on review._
-
-When the structure is accepted, replace the logging callbacks with a settings model and persistence, then remove this prototype marker. If rejected, delete `ui/settings_panel/` and `resources/layouts/settings/` rather than evolving the mock indefinitely.
+The former raygui content seam, generated settings packages, and settings `.rgl`
+resources have been removed. The next model-level step is to define draft,
+Apply/Cancel, validation, defaults, and persistence semantics.

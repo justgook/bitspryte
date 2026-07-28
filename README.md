@@ -1,14 +1,15 @@
 # BitSpryte
 
-A small Odin playground for experimenting with **raylib** and **raygui** while growing the foundations of a pixel-art editor.
+A small Odin playground for growing the foundations of a pixel-art editor with **raylib** rendering and a state-mode **SMGUI** interface. The remaining raygui controls are being migrated incrementally.
 
 The first experiment includes:
 
 - a 32×32 CPU-side image and nearest-neighbour GPU texture
 - pencil and eraser tools
 - zoom and pixel grid
-- raygui toolbar, color picker, palette, and status bar
-- a settings panel with runtime theme switching
+- a legacy raygui toolbar, color picker, palette, and status bar
+- a complete SMGUI Settings window rendered through raylib
+- one SMGUI form module for each Settings page
 - a native macOS application menu and `.app` bundle
 - transparent checkerboard and PNG export
 
@@ -53,11 +54,9 @@ The main window is resizable with a 1000×700 minimum. Toolbars anchor to the wi
 
 ## UI resource workflow
 
-The application uses all three raygui companion formats:
+During the migration, the remaining main-window raygui interface uses these companion formats:
 
-- `resources/layouts/main.rgl` — main application layout
-- `resources/layouts/settings/window.rgl` — draggable settings shell
-- `resources/layouts/settings/<section>.rgl` — one independent content layout per settings section
+- `resources/layouts/main.rgl` — legacy main application layout
 - `resources/styles/*.rgs` — loaded at runtime and selectable from the Theme settings page
 - `resources/icons/bitspryte.rgi` — loaded at runtime before drawing the UI
 
@@ -65,7 +64,6 @@ Open resources with the companion tools (override each executable path if it is 
 
 ```sh
 make layout-edit RGUI_LAYOUT=/path/to/rGuiLayout
-make settings-layout-edit SETTINGS_SECTION=files RGUI_LAYOUT=/path/to/rGuiLayout
 make style-edit STYLE_SOURCE=resources/styles/style_amber.rgs RGUI_STYLER=/path/to/rGuiStyler
 make icons-edit RGUI_ICONS=/path/to/rGuiIcons
 ```
@@ -82,6 +80,16 @@ Check generated layout integration with:
 make check
 ```
 
+## SMGUI migration
+
+The SMGUI single-header library is vendored under `ui/smgui/vendor/`. Its host
+adapter replaces SMGUI's normal window backend: raylib input is forwarded to
+SMGUI, then its software RGBA buffer is uploaded as a raylib texture. A custom
+font hook renders the bundled Aseprite proportional pixel-font sprite sheet at
+2× integer scale, with the embedded PSF2 font as fallback. SMGUI now owns the complete draggable Settings window, category navigation,
+window actions, and every settings page. Each page is implemented in its own C
+module under `ui/smgui/settings/`. See `ui/smgui/README.md` for ownership and migration details.
+
 ## macOS menu
 
 The Cocoa bridge in `platform/native_menu/` installs shared application commands in the system menu bar:
@@ -91,9 +99,13 @@ The Cocoa bridge in `platform/native_menu/` installs shared application commands
 - **Edit → Clear Canvas**
 - standard About, Hide, Quit, Minimize, Zoom, and Bring All to Front commands
 
-Settings from the native menu and the in-window Settings button open the same draggable, modeless raygui window. Its Aseprite-inspired shell is defined in `resources/layouts/settings/window.rgl`; every category has a dedicated sibling layout such as `files.rgl`, `keyboard_shortcuts.rgl`, or `theme.rgl`. Routing lives in `ui/settings_panel/settings_panel.odin`.
-
-Every category routes to a dedicated page procedure. Files and Theme have interactive controls. Keyboard Shortcuts provides a searchable, scrollable flat action/key/context table without submenus. **Close Active Window** can already be rebound by selecting its key cell and pressing another key; its default is Escape. Other key cells and Import, Export, and Reset remain logging stubs. Other unfinished pages expose a mock action. All mutations currently call dedicated logging-only callbacks—there is intentionally no persistence yet. See `ui/settings_panel/PROTOTYPE_NOTES.md` before promoting the mock. Non-macOS builds use a no-op native-menu implementation.
+Settings from the native menu and in-window button open the same draggable,
+modeless SMGUI window. Every category is SMGUI-owned. Files retains its
+interactive prototype values, while Keyboard Shortcuts provides a searchable
+flat action/key/context table. **Close Active Window** can be rebound by
+selecting its key cell and pressing another key; its default is Escape. Other
+key cells and Import, Export, Reset, and unfinished-page actions remain mocks.
+There is intentionally no settings persistence yet. See `ui/settings_panel/PROTOTYPE_NOTES.md` before promoting the mock. Non-macOS builds use a no-op native-menu implementation.
 
 ## Actions and events
 

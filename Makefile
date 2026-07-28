@@ -19,15 +19,18 @@ BIN_NAME ?= bitspryte
 BIN := $(BUILD_DIR)/$(BIN_NAME)
 GENERATED_DIR := $(BUILD_DIR)/generated
 GENERATED_LAYOUT := $(GENERATED_DIR)/layout/layout.odin
-SETTINGS_LAYOUT_DIR := resources/layouts/settings
-SETTINGS_SECTIONS := window general files keyboard_shortcuts color alerts editor selection timeline cursors background grid guides_and_slices undo theme extensions aseprite_format experimental reset
-GENERATED_SETTINGS_LAYOUTS := $(foreach section,$(SETTINGS_SECTIONS),$(GENERATED_DIR)/settings_$(section)/settings_$(section).odin)
-GENERATED_LAYOUTS := $(GENERATED_LAYOUT) $(GENERATED_SETTINGS_LAYOUTS)
 RESOURCE_BUILD_DIR := $(BUILD_DIR)/resources
 RESOURCE_STAMP := $(RESOURCE_BUILD_DIR)/.stamp
 NATIVE_DIR := $(BUILD_DIR)/native
 NATIVE_OBJECT := $(NATIVE_DIR)/native_menu.o
 NATIVE_LIBRARY := $(NATIVE_DIR)/libbitspryte_native.a
+SMGUI_DIR := $(BUILD_DIR)/smgui
+SMGUI_BRIDGE_OBJECT := $(SMGUI_DIR)/smgui_bridge.o
+SMGUI_PAGE_SOURCES := $(wildcard ui/smgui/settings/*.c)
+SMGUI_PAGE_OBJECTS := $(patsubst ui/smgui/settings/%.c,$(SMGUI_DIR)/settings/%.o,$(SMGUI_PAGE_SOURCES))
+SMGUI_OBJECTS := $(SMGUI_BRIDGE_OBJECT) $(SMGUI_PAGE_OBJECTS)
+SMGUI_LIBRARY := $(SMGUI_DIR)/libbitspryte_smgui.a
+SMGUI_TEST := $(SMGUI_DIR)/test_smgui_bridge
 APP_NAME ?= BitSpryte
 APP_DIR := $(BUILD_DIR)/$(APP_NAME).app
 APP_CONTENTS := $(APP_DIR)/Contents
@@ -36,6 +39,7 @@ APP_STAMP := $(APP_CONTENTS)/.stamp
 ODIN ?= odin
 PYTHON ?= python3
 CLANG ?= xcrun clang
+SMGUI_CC ?= cc
 AR ?= ar
 MACOSX_DEPLOYMENT_TARGET ?= 14.0
 RGUI_LAYOUT ?= rGuiLayout
@@ -47,6 +51,9 @@ RESOURCE_SOURCES := $(shell find resources -type f -print)
 NATIVE_SOURCES := platform/native_menu/native_menu.m platform/native_menu/native_menu.odin
 UNAME_S := $(shell uname -s)
 
+SMGUI_LIBRARY_IMPORT := $(shell $(PYTHON) -c 'import os,sys; print(os.path.relpath(sys.argv[1], sys.argv[2]))' "$(abspath $(SMGUI_LIBRARY))" "$(abspath ui/smgui)")
+ODIN_SMGUI_FLAGS := -define:SMGUI_LIB="$(SMGUI_LIBRARY_IMPORT)"
+
 ifeq ($(UNAME_S),Darwin)
 NATIVE_DEPS := $(NATIVE_LIBRARY)
 NATIVE_LIBRARY_IMPORT := $(shell $(PYTHON) -c 'import os,sys; print(os.path.relpath(sys.argv[1], sys.argv[2]))' "$(abspath $(NATIVE_LIBRARY))" "$(abspath platform/native_menu)")
@@ -56,12 +63,10 @@ NATIVE_DEPS :=
 ODIN_NATIVE_FLAGS :=
 endif
 LAYOUT_SOURCE ?= resources/layouts/main.rgl
-SETTINGS_SECTION ?= window
-SETTINGS_LAYOUT_SOURCE := $(SETTINGS_LAYOUT_DIR)/$(SETTINGS_SECTION).rgl
 STYLE_SOURCE ?= resources/styles/dark.rgs
 ICON_SOURCE ?= resources/icons/bitspryte.rgi
 
-.PHONY: all app check test run run-bin generate resources clean layout-edit settings-layout-edit style-edit icons-edit export-raygui-code
+.PHONY: all app check test run run-bin generate resources clean layout-edit style-edit icons-edit export-raygui-code FORCE
 
 ifeq ($(UNAME_S),Darwin)
 all: app
@@ -71,17 +76,19 @@ endif
 
 app: $(APP_STAMP)
 
-generate: $(GENERATED_LAYOUTS)
+generate: $(GENERATED_LAYOUT)
 
 resources: $(RESOURCE_STAMP)
 
-check: test $(GENERATED_LAYOUTS) $(NATIVE_DEPS)
+check: test $(GENERATED_LAYOUT) $(NATIVE_DEPS) $(SMGUI_LIBRARY)
 	$(Q)$(ODIN) check . \
 		-collection:generated="$(abspath $(GENERATED_DIR))" \
-		$(ODIN_NATIVE_FLAGS)
+		$(ODIN_NATIVE_FLAGS) \
+		$(ODIN_SMGUI_FLAGS)
 
-test:
+test: $(SMGUI_TEST)
 	$(Q)$(PYTHON) tools/test_rgl_to_odin.py
+	$(Q)$(SMGUI_TEST)
 
 ifeq ($(UNAME_S),Darwin)
 run: $(APP_STAMP)
@@ -102,11 +109,12 @@ $(APP_STAMP): $(BIN) $(RESOURCE_STAMP) platform/macos/Info.plist | $(BUILD_DIR)
 	$(Q)cp platform/macos/Info.plist "$(APP_CONTENTS)/Info.plist"
 	$(Q)touch "$@"
 
-$(BIN): $(ODIN_SOURCES) $(GENERATED_LAYOUTS) $(RESOURCE_STAMP) $(NATIVE_DEPS) | $(BUILD_DIR)
+$(BIN): $(ODIN_SOURCES) $(GENERATED_LAYOUT) $(RESOURCE_STAMP) $(NATIVE_DEPS) $(SMGUI_LIBRARY) | $(BUILD_DIR)
 	$(Q)echo "Building $(BIN_NAME)..."
 	$(Q)$(ODIN) build . \
 		-collection:generated="$(abspath $(GENERATED_DIR))" \
 		$(ODIN_NATIVE_FLAGS) \
+		$(ODIN_SMGUI_FLAGS) \
 		-out:"$@"
 
 $(NATIVE_LIBRARY): $(NATIVE_OBJECT)
@@ -116,25 +124,31 @@ $(NATIVE_OBJECT): platform/native_menu/native_menu.m | $(NATIVE_DIR)
 	$(Q)echo "Building native macOS menu bridge..."
 	$(Q)MACOSX_DEPLOYMENT_TARGET="$(MACOSX_DEPLOYMENT_TARGET)" $(CLANG) -fobjc-arc -Wall -Wextra -c "$<" -o "$@"
 
+$(SMGUI_LIBRARY): $(SMGUI_OBJECTS) FORCE
+	$(Q)rm -f "$@"
+	$(Q)$(AR) rcs "$@" $(SMGUI_OBJECTS)
+
+$(SMGUI_BRIDGE_OBJECT): ui/smgui/smgui_bridge.c ui/smgui/smgui_bridge.h ui/smgui/settings/settings_internal.h ui/smgui/vendor/ui.h ui/smgui/vendor/ui_psf2.h | $(SMGUI_DIR)
+	$(Q)echo "Building SMGUI raylib bridge..."
+	$(Q)MACOSX_DEPLOYMENT_TARGET="$(MACOSX_DEPLOYMENT_TARGET)" $(SMGUI_CC) -std=c11 -Wall -Wextra -Iui/smgui -Iui/smgui/vendor -c "$<" -o "$@"
+
+$(SMGUI_DIR)/settings/%.o: ui/smgui/settings/%.c ui/smgui/settings/settings_internal.h ui/smgui/smgui_bridge.h ui/smgui/vendor/ui.h | $(SMGUI_DIR)/settings
+	$(Q)MACOSX_DEPLOYMENT_TARGET="$(MACOSX_DEPLOYMENT_TARGET)" $(SMGUI_CC) -std=c11 -Wall -Wextra -Iui/smgui -Iui/smgui/vendor -c "$<" -o "$@"
+
+$(SMGUI_TEST): tools/test_smgui_bridge.c $(SMGUI_LIBRARY)
+	$(Q)MACOSX_DEPLOYMENT_TARGET="$(MACOSX_DEPLOYMENT_TARGET)" $(SMGUI_CC) -std=c11 -Wall -Wextra -I. "$<" "$(SMGUI_LIBRARY)" -lm -o "$@"
+
 $(GENERATED_LAYOUT): $(LAYOUT_SOURCE) tools/rgl_to_odin.py
 	$(Q)echo "Generating Odin layout from $<..."
 	$(Q)$(PYTHON) tools/rgl_to_odin.py "$<" "$@" --package layout
 
-define SETTINGS_LAYOUT_RULE
-$(GENERATED_DIR)/settings_$(1)/settings_$(1).odin: $(SETTINGS_LAYOUT_DIR)/$(1).rgl tools/rgl_to_odin.py
-	$$(Q)echo "Generating Odin settings/$(1) layout..."
-	$$(Q)$$(PYTHON) tools/rgl_to_odin.py "$$<" "$$@" --package settings_$(1)
-endef
-
-$(foreach section,$(SETTINGS_SECTIONS),$(eval $(call SETTINGS_LAYOUT_RULE,$(section))))
-
-$(RESOURCE_STAMP): $(RESOURCE_SOURCES) | $(BUILD_DIR)
+$(RESOURCE_STAMP): $(RESOURCE_SOURCES) FORCE | $(BUILD_DIR)
 	$(Q)echo "Copying raygui resources..."
 	$(Q)rm -rf "$(RESOURCE_BUILD_DIR)"
 	$(Q)cp -R resources "$(RESOURCE_BUILD_DIR)"
 	$(Q)touch "$@"
 
-$(BUILD_DIR) $(NATIVE_DIR):
+$(BUILD_DIR) $(NATIVE_DIR) $(SMGUI_DIR) $(SMGUI_DIR)/settings:
 	$(Q)mkdir -p "$@"
 
 # Open source resources in the raygui companion applications. Override the
@@ -143,11 +157,6 @@ $(BUILD_DIR) $(NATIVE_DIR):
 layout-edit:
 	$(Q)command -v "$(RGUI_LAYOUT)" >/dev/null || { echo "rGuiLayout not found; set RGUI_LAYOUT=/path/to/executable" >&2; exit 1; }
 	$(Q)"$(RGUI_LAYOUT)" "$(LAYOUT_SOURCE)"
-
-settings-layout-edit:
-	$(Q)test -f "$(SETTINGS_LAYOUT_SOURCE)" || { echo "Unknown SETTINGS_SECTION=$(SETTINGS_SECTION). Available: $(SETTINGS_SECTIONS)" >&2; exit 1; }
-	$(Q)command -v "$(RGUI_LAYOUT)" >/dev/null || { echo "rGuiLayout not found; set RGUI_LAYOUT=/path/to/executable" >&2; exit 1; }
-	$(Q)"$(RGUI_LAYOUT)" "$(SETTINGS_LAYOUT_SOURCE)"
 
 style-edit:
 	$(Q)command -v "$(RGUI_STYLER)" >/dev/null || { echo "rGuiStyler not found; set RGUI_STYLER=/path/to/executable" >&2; exit 1; }
@@ -166,12 +175,11 @@ export-raygui-code: | $(BUILD_DIR)
 	$(Q)command -v "$(RGUI_ICONS)" >/dev/null || { echo "rGuiIcons not found" >&2; exit 1; }
 	$(Q)mkdir -p "$(BUILD_DIR)/raygui-code"
 	$(Q)"$(RGUI_LAYOUT)" --input "$(LAYOUT_SOURCE)" --output "$(BUILD_DIR)/raygui-code/layout.h"
-	$(Q)for section in $(SETTINGS_SECTIONS); do \
-		"$(RGUI_LAYOUT)" --input "$(SETTINGS_LAYOUT_DIR)/$$section.rgl" --output "$(BUILD_DIR)/raygui-code/settings_$$section.h"; \
-	done
 	$(Q)"$(RGUI_STYLER)" --input "$(STYLE_SOURCE)" --output "$(BUILD_DIR)/raygui-code/style.h" --format 2
 	$(Q)test -f "$(BUILD_DIR)/raygui-code/style.h.h" && mv "$(BUILD_DIR)/raygui-code/style.h.h" "$(BUILD_DIR)/raygui-code/style.h" || true
 	$(Q)"$(RGUI_ICONS)" --input "$(ICON_SOURCE)" --output "$(BUILD_DIR)/raygui-code/icons.h"
+
+FORCE:
 
 clean:
 	$(Q)rm -rf "$(BUILD_DIR)"
