@@ -15,8 +15,18 @@ WINDOW_WIDTH :: 1280
 WINDOW_HEIGHT :: 800
 
 Tool :: enum c.int {
+	Selection,
 	Pencil,
 	Eraser,
+	Eyedropper,
+	Zoom,
+	Move,
+	Fill,
+	Line,
+	Rectangle,
+	Ellipse,
+	Brush,
+	Text,
 }
 
 resource_path :: proc(relative_path: cstring) -> cstring {
@@ -30,6 +40,15 @@ resource_path :: proc(relative_path: cstring) -> cstring {
 
 translated :: proc(rect: rl.Rectangle, x, y: f32) -> rl.Rectangle {
 	return rl.Rectangle{rect.x + x, rect.y + y, rect.width, rect.height}
+}
+
+draw_tool_toggle :: proc(bounds: rl.Rectangle, text: cstring, kind: Tool, selected: ^c.int, status: ^cstring) {
+	active := selected^ == c.int(kind)
+	rl.GuiToggle(bounds, text, &active)
+	if active && selected^ != c.int(kind) {
+		selected^ = c.int(kind)
+		status^ = "Tool selected"
+	}
 }
 
 load_style :: proc(style: c.int) {
@@ -144,18 +163,20 @@ main :: proc() {
 	for !rl.WindowShouldClose() {
 		screen_width := f32(rl.GetScreenWidth())
 		screen_height := f32(rl.GetScreenHeight())
-		x_offset := screen_width - layout.REFERENCE_WIDTH
-
 		toolbar := layout.toolbar
 		toolbar.width = screen_width
 		status_bar := layout.statusBar
 		status_bar.y = screen_height - status_bar.height
 		status_bar.width = screen_width
 		sidebar := layout.sidebar
-		sidebar.x += x_offset
 		sidebar.height = status_bar.y - sidebar.y
+		tool_panel := layout.toolPanel
+		tool_panel.x = screen_width - tool_panel.width
+		tool_panel.height = status_bar.y - tool_panel.y
+		tool_x_offset := tool_panel.x - layout.toolPanel.x
 		workspace := layout.workspace
-		workspace.width = sidebar.x
+		workspace.x = sidebar.x + sidebar.width
+		workspace.width = tool_panel.x - workspace.x
 		workspace.height = status_bar.y - workspace.y
 
 		export_button := layout.exportButton
@@ -165,10 +186,15 @@ main :: proc() {
 		settings_button := layout.settingsButton
 		settings_button.width = 120
 		settings_button.x = clear_button.x - settings_button.width - 10
-		color_group := translated(layout.colorGroup, x_offset, 0)
-		color_picker := translated(layout.colorPicker, x_offset, 0)
-		color_swatch := translated(layout.colorSwatch, x_offset, 0)
-		palette_group := translated(layout.paletteGroup, x_offset, 0)
+		palette_group := layout.paletteGroup
+		color_group := layout.colorGroup
+		color_group.y = status_bar.y - color_group.height - 12
+		color_picker := layout.colorPicker
+		color_picker.x = color_group.x + 16
+		color_picker.y = color_group.y + 28
+		color_swatch := layout.colorSwatch
+		color_swatch.x = color_group.x + 16
+		color_swatch.y = color_group.y + color_group.height - color_swatch.height - 16
 
 		switch native.take_action() {
 		case .Settings:     actions.post(&action_bus, actions.make(.Open_Settings, .Native_Menu))
@@ -199,7 +225,8 @@ main :: proc() {
 		mouse := rl.GetMousePosition()
 		settings_captures_mouse := settings_panel.captures_mouse(&settings, mouse)
 		over_canvas := rl.CheckCollisionPointRec(mouse, canvas_rect)
-		painting := !settings_captures_mouse && over_canvas && (rl.IsMouseButtonDown(.LEFT) || rl.IsMouseButtonDown(.RIGHT))
+		paint_tool_active := tool == c.int(Tool.Pencil) || tool == c.int(Tool.Eraser) || tool == c.int(Tool.Brush)
+		painting := !settings_captures_mouse && over_canvas && (rl.IsMouseButtonDown(.RIGHT) || (paint_tool_active && rl.IsMouseButtonDown(.LEFT)))
 		if painting {
 			x := c.int((mouse.x - canvas_rect.x) / canvas_zoom)
 			y := c.int((mouse.y - canvas_rect.y) / canvas_zoom)
@@ -263,7 +290,6 @@ main :: proc() {
 		// All control rectangles and labels below are generated from main.rgl.
 		rl.GuiPanel(toolbar, layout.toolbar_TEXT)
 		rl.GuiLabel(layout.title, layout.title_TEXT)
-		rl.GuiToggleGroup(layout.toolSelector, layout.toolSelector_TEXT, &tool)
 		rl.GuiSliderBar(layout.zoomSlider, layout.zoomSlider_TEXT, nil, &zoom, 6, 20)
 
 		if rl.GuiButton(settings_button, layout.settingsButton_TEXT) {
@@ -277,7 +303,7 @@ main :: proc() {
 			actions.post(&action_bus, actions.make(.Export_PNG, .User_Interface))
 		}
 
-		// raygui inspector and color controls.
+		// Left palette/color inspector and right vertical tool strip.
 		rl.GuiPanel(sidebar, layout.sidebar_TEXT)
 		rl.GuiGroupBox(color_group, layout.colorGroup_TEXT)
 		rl.GuiColorPicker(color_picker, layout.colorPicker_TEXT, &paint_color)
@@ -296,6 +322,20 @@ main :: proc() {
 			}
 			rl.DrawRectangleLinesEx(bounds, 1, rl.Color{20, 22, 28, 255})
 		}
+
+		rl.GuiPanel(tool_panel, layout.toolPanel_TEXT)
+		draw_tool_toggle(translated(layout.toolSelection, tool_x_offset, 0), layout.toolSelection_TEXT, .Selection, &tool, &status)
+		draw_tool_toggle(translated(layout.toolPencil, tool_x_offset, 0), layout.toolPencil_TEXT, .Pencil, &tool, &status)
+		draw_tool_toggle(translated(layout.toolEraser, tool_x_offset, 0), layout.toolEraser_TEXT, .Eraser, &tool, &status)
+		draw_tool_toggle(translated(layout.toolEyedropper, tool_x_offset, 0), layout.toolEyedropper_TEXT, .Eyedropper, &tool, &status)
+		draw_tool_toggle(translated(layout.toolZoom, tool_x_offset, 0), layout.toolZoom_TEXT, .Zoom, &tool, &status)
+		draw_tool_toggle(translated(layout.toolMove, tool_x_offset, 0), layout.toolMove_TEXT, .Move, &tool, &status)
+		draw_tool_toggle(translated(layout.toolFill, tool_x_offset, 0), layout.toolFill_TEXT, .Fill, &tool, &status)
+		draw_tool_toggle(translated(layout.toolLine, tool_x_offset, 0), layout.toolLine_TEXT, .Line, &tool, &status)
+		draw_tool_toggle(translated(layout.toolRectangle, tool_x_offset, 0), layout.toolRectangle_TEXT, .Rectangle, &tool, &status)
+		draw_tool_toggle(translated(layout.toolEllipse, tool_x_offset, 0), layout.toolEllipse_TEXT, .Ellipse, &tool, &status)
+		draw_tool_toggle(translated(layout.toolBrush, tool_x_offset, 0), layout.toolBrush_TEXT, .Brush, &tool, &status)
+		draw_tool_toggle(translated(layout.toolText, tool_x_offset, 0), layout.toolText_TEXT, .Text, &tool, &status)
 
 		rl.GuiStatusBar(status_bar, status)
 

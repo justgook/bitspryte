@@ -8,15 +8,27 @@
 r 0 0 1280 800
 c 000 3 toolbar 0 0 1280 56 0 
 c 001 4 title 16 12 130 30 0 BITSPRYTE LAB
-c 002 9 toolSelector 160 12 96 30 0 Pencil;Eraser
-c 003 17 zoomSlider 420 18 180 20 0 Zoom
-c 004 5 settingsButton 960 12 120 30 0 #142#Settings
-c 005 5 clearButton 1090 12 80 30 0 #143#Clear
-c 006 5 exportButton 1180 12 84 30 0 #7#Export
-c 007 3 workspace 0 56 1020 716 0 
-c 008 3 sidebar 1020 56 260 716 0 
-c 009 1 colorGroup 1032 70 236 280 0 COLOR
-c 010 22 colorPicker 1048 98 196 196 0 
-c 011 23 colorSwatch 1048 306 196 28 0 
-c 012 1 paletteGroup 1032 368 236 112 0 PALETTE
-c 013 19 statusBar 0 772 1280 28 0 
+c 002 17 zoomSlider 250 18 180 20 0 Zoom
+c 003 5 settingsButton 960 12 120 30 0 #142#Settings
+c 004 5 clearButton 1090 12 80 30 0 #143#Clear
+c 005 5 exportButton 1180 12 84 30 0 #7#Export
+c 006 3 sidebar 0 56 260 716 0 
+c 007 1 paletteGroup 12 70 236 112 0 PALETTE
+c 008 3 workspace 260 56 972 716 0 
+c 009 1 colorGroup 12 480 236 280 0 COLOR
+c 010 22 colorPicker 28 508 196 196 0 
+c 011 23 colorSwatch 28 716 196 28 0 
+c 012 3 toolPanel 1232 56 48 716 0 
+c 013 8 toolSelection 1238 64 36 36 0 #38#
+c 014 8 toolPencil 1238 104 36 36 0 #22#
+c 015 8 toolEraser 1238 144 36 36 0 #28#
+c 016 8 toolEyedropper 1238 184 36 36 0 #27#
+c 017 8 toolZoom 1238 224 36 36 0 #103#
+c 018 8 toolMove 1238 264 36 36 0 #52#
+c 019 8 toolFill 1238 304 36 36 0 #29#
+c 020 8 toolLine 1238 344 36 36 0 #192#
+c 021 8 toolRectangle 1238 384 36 36 0 #80#
+c 022 8 toolEllipse 1238 424 36 36 0 #64#
+c 023 8 toolBrush 1238 464 36 36 0 #24#
+c 024 8 toolText 1238 504 36 36 0 #30#
+c 025 19 statusBar 0 772 1280 28 0 
