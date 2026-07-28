@@ -56,7 +56,8 @@ The main window is resizable with a 1000×700 minimum. Toolbars anchor to the wi
 The application uses all three raygui companion formats:
 
 - `resources/layouts/main.rgl` — main application layout
-- `resources/layouts/settings.rgl` — local content layout for the draggable settings window
+- `resources/layouts/settings/window.rgl` — draggable settings shell
+- `resources/layouts/settings/<section>.rgl` — one independent content layout per settings section
 - `resources/styles/*.rgs` — loaded at runtime and selectable from the Theme settings page
 - `resources/icons/bitspryte.rgi` — loaded at runtime before drawing the UI
 
@@ -64,7 +65,7 @@ Open resources with the companion tools (override each executable path if it is 
 
 ```sh
 make layout-edit RGUI_LAYOUT=/path/to/rGuiLayout
-make settings-layout-edit RGUI_LAYOUT=/path/to/rGuiLayout
+make settings-layout-edit SETTINGS_SECTION=files RGUI_LAYOUT=/path/to/rGuiLayout
 make style-edit STYLE_SOURCE=resources/styles/style_amber.rgs RGUI_STYLER=/path/to/rGuiStyler
 make icons-edit RGUI_ICONS=/path/to/rGuiIcons
 ```
@@ -90,7 +91,7 @@ The Cocoa bridge in `platform/native_menu/` installs shared application commands
 - **Edit → Clear Canvas**
 - standard About, Hide, Quit, Minimize, Zoom, and Bring All to Front commands
 
-Settings from the native menu and the in-window Settings button open the same draggable, modeless raygui window. Its Aseprite-inspired category shell and Files mock are independently designed in `resources/layouts/settings.rgl`; routing lives in `ui/settings_panel/settings_panel.odin`.
+Settings from the native menu and the in-window Settings button open the same draggable, modeless raygui window. Its Aseprite-inspired shell is defined in `resources/layouts/settings/window.rgl`; every category has a dedicated sibling layout such as `files.rgl`, `keyboard_shortcuts.rgl`, or `theme.rgl`. Routing lives in `ui/settings_panel/settings_panel.odin`.
 
 Every category routes to a dedicated page procedure. Files and Theme have interactive controls. Keyboard Shortcuts provides a searchable, scrollable flat action/key/context table without submenus. **Close Active Window** can already be rebound by selecting its key cell and pressing another key; its default is Escape. Other key cells and Import, Export, and Reset remain logging stubs. Other unfinished pages expose a mock action. All mutations currently call dedicated logging-only callbacks—there is intentionally no persistence yet. See `ui/settings_panel/PROTOTYPE_NOTES.md` before promoting the mock. Non-macOS builds use a no-op native-menu implementation.
 

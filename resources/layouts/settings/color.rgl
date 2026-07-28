@@ -1,0 +1,5 @@
+# BitSpryte Color settings section.
+r 0 0 672 566
+c 000 4 title 32 80 600 32 0 Color
+c 001 4 description 32 128 600 72 0 Color management and profile mock.
+c 002 5 action 32 222 190 32 0 Run Mock Action

@@ -1,7 +1,8 @@
 # UI resources
 
 - `layouts/main.rgl` defines the main application UI.
-- `layouts/settings.rgl` independently defines local content for the draggable settings window.
+- `layouts/settings/window.rgl` defines the draggable preferences shell.
+- `layouts/settings/<section>.rgl` independently defines each section in content-local coordinates.
 - `styles/*.rgs` are binary raygui 4.0 styles edited with **rGuiStyler**.
 - `icons/bitspryte.rgi` is a binary raygui icon set edited with **rGuiIcons**.
 

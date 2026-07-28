@@ -1,0 +1,5 @@
+# BitSpryte Theme settings section.
+r 0 0 672 566
+c 000 1 themeGroup 20 64 632 458 0 APPLICATION THEME
+c 001 4 themeLabel 40 94 580 24 0 Select a raygui style resource:
+c 002 11 themeSelector 40 132 280 26 0 Default;Amber;Ashes;Bluish;Candy;Cherry;Cyber;Dark;Enefete;Genesis;Jungle;Lavanda;RLTech;Sunny;Terminal

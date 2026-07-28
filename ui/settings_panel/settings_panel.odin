@@ -5,7 +5,25 @@ package settings_panel
 import "core:c"
 import "core:fmt"
 import themes "../../app/themes"
-import settings_layout "generated:settings_layout"
+import alerts_layout "generated:settings_alerts"
+import aseprite_format_layout "generated:settings_aseprite_format"
+import background_layout "generated:settings_background"
+import color_layout "generated:settings_color"
+import cursors_layout "generated:settings_cursors"
+import editor_layout "generated:settings_editor"
+import experimental_layout "generated:settings_experimental"
+import extensions_layout "generated:settings_extensions"
+import files_layout "generated:settings_files"
+import general_layout "generated:settings_general"
+import grid_layout "generated:settings_grid"
+import guides_layout "generated:settings_guides_and_slices"
+import shortcuts_layout "generated:settings_keyboard_shortcuts"
+import reset_layout "generated:settings_reset"
+import selection_layout "generated:settings_selection"
+import theme_layout "generated:settings_theme"
+import timeline_layout "generated:settings_timeline"
+import undo_layout "generated:settings_undo"
+import settings_layout "generated:settings_window"
 import rl "vendor:raylib/v55"
 
 TITLE_BAR_HEIGHT :: f32(28)
@@ -122,6 +140,15 @@ at :: proc(state: ^State, local: rl.Rectangle) -> rl.Rectangle {
 	}
 }
 
+page_at :: proc(state: ^State, local: rl.Rectangle) -> rl.Rectangle {
+	return rl.Rectangle{
+		state.bounds.x + settings_layout.contentPanel.x + local.x,
+		state.bounds.y + settings_layout.contentPanel.y + local.y,
+		local.width,
+		local.height,
+	}
+}
+
 keep_on_screen :: proc(state: ^State) {
 	max_x := max(f32(0), f32(rl.GetScreenWidth()) - state.bounds.width)
 	max_y := max(f32(0), f32(rl.GetScreenHeight()) - TITLE_BAR_HEIGHT)
@@ -223,83 +250,57 @@ draw :: proc(state: ^State) -> Result {
 // Files is the detailed visual mock from the reference. Every mutation is
 // routed to a logging-only callback for now.
 draw_files_page :: proc(state: ^State) {
-	rl.GuiLabel(at(state, settings_layout.pageTitle), "Files")
-	rl.GuiLine(at(state, settings_layout.sectionLine), nil)
-	rl.GuiLabel(at(state, settings_layout.defaultExtensionHeading), settings_layout.defaultExtensionHeading_TEXT)
+	rl.GuiLabel(page_at(state, files_layout.pageTitle), files_layout.pageTitle_TEXT)
+	rl.GuiLine(page_at(state, files_layout.sectionLine), files_layout.sectionLine_TEXT)
+	rl.GuiLabel(page_at(state, files_layout.defaultExtensionHeading), files_layout.defaultExtensionHeading_TEXT)
 
-	combo(state, settings_layout.saveLabel, settings_layout.saveFormat, &state.save_format, log_save_format_changed)
-	combo(state, settings_layout.exportImageLabel, settings_layout.exportImageFormat, &state.export_image_format, log_export_image_format_changed)
-	combo(state, settings_layout.exportAnimationLabel, settings_layout.exportAnimationFormat, &state.export_animation_format, log_export_animation_format_changed)
-	combo(state, settings_layout.spriteSheetLabel, settings_layout.spriteSheetFormat, &state.sprite_sheet_format, log_sprite_sheet_format_changed)
+	combo(state, files_layout.saveLabel, files_layout.saveLabel_TEXT, files_layout.saveFormat, files_layout.saveFormat_TEXT, &state.save_format, log_save_format_changed)
+	combo(state, files_layout.exportImageLabel, files_layout.exportImageLabel_TEXT, files_layout.exportImageFormat, files_layout.exportImageFormat_TEXT, &state.export_image_format, log_export_image_format_changed)
+	combo(state, files_layout.exportAnimationLabel, files_layout.exportAnimationLabel_TEXT, files_layout.exportAnimationFormat, files_layout.exportAnimationFormat_TEXT, &state.export_animation_format, log_export_animation_format_changed)
+	combo(state, files_layout.spriteSheetLabel, files_layout.spriteSheetLabel_TEXT, files_layout.spriteSheetFormat, files_layout.spriteSheetFormat_TEXT, &state.sprite_sheet_format, log_sprite_sheet_format_changed)
 
-	rl.GuiLabel(at(state, settings_layout.recentItemsLabel), settings_layout.recentItemsLabel_TEXT)
+	rl.GuiLabel(page_at(state, files_layout.recentItemsLabel), files_layout.recentItemsLabel_TEXT)
 	previous_recent := state.recent_items
-	rl.GuiSliderBar(at(state, settings_layout.recentItems), nil, nil, &state.recent_items, 0, 32)
+	rl.GuiSliderBar(page_at(state, files_layout.recentItems), nil, nil, &state.recent_items, 0, 32)
 	if state.recent_items != previous_recent { log_recent_items_changed() }
-	if rl.GuiButton(at(state, settings_layout.clearRecentButton), settings_layout.clearRecentButton_TEXT) {
+	if rl.GuiButton(page_at(state, files_layout.clearRecentButton), files_layout.clearRecentButton_TEXT) {
 		state.recent_items = 0
 		log_clear_recent_items()
 	}
 
-	checkbox(state, settings_layout.fullPath, settings_layout.fullPathLabel, &state.show_full_path, log_full_path_changed)
-	rl.GuiLabel(at(state, settings_layout.recoveryHeading), settings_layout.recoveryHeading_TEXT)
-	rl.GuiLine(at(state, settings_layout.recoveryLine), nil)
-	checkbox(state, settings_layout.autoRecovery, settings_layout.autoRecoveryLabel, &state.auto_recovery, log_auto_recovery_changed)
-	combo_only(state, settings_layout.recoveryInterval, &state.recovery_interval, log_recovery_interval_changed)
-	checkbox(state, settings_layout.keepEdited, settings_layout.keepEditedLabel, &state.keep_edited, log_keep_edited_changed)
-	combo_only(state, settings_layout.keepEditedDuration, &state.keep_edited_duration, log_keep_edited_duration_changed)
-	checkbox(state, settings_layout.keepClosed, settings_layout.keepClosedLabel, &state.keep_closed, log_keep_closed_changed)
-	combo_only(state, settings_layout.keepClosedDuration, &state.keep_closed_duration, log_keep_closed_duration_changed)
+	checkbox(state, files_layout.fullPath, files_layout.fullPathLabel, files_layout.fullPathLabel_TEXT, &state.show_full_path, log_full_path_changed)
+	rl.GuiLabel(page_at(state, files_layout.recoveryHeading), files_layout.recoveryHeading_TEXT)
+	rl.GuiLine(page_at(state, files_layout.recoveryLine), files_layout.recoveryLine_TEXT)
+	checkbox(state, files_layout.autoRecovery, files_layout.autoRecoveryLabel, files_layout.autoRecoveryLabel_TEXT, &state.auto_recovery, log_auto_recovery_changed)
+	combo_only(state, files_layout.recoveryInterval, files_layout.recoveryInterval_TEXT, &state.recovery_interval, log_recovery_interval_changed)
+	checkbox(state, files_layout.keepEdited, files_layout.keepEditedLabel, files_layout.keepEditedLabel_TEXT, &state.keep_edited, log_keep_edited_changed)
+	combo_only(state, files_layout.keepEditedDuration, files_layout.keepEditedDuration_TEXT, &state.keep_edited_duration, log_keep_edited_duration_changed)
+	checkbox(state, files_layout.keepClosed, files_layout.keepClosedLabel, files_layout.keepClosedLabel_TEXT, &state.keep_closed, log_keep_closed_changed)
+	combo_only(state, files_layout.keepClosedDuration, files_layout.keepClosedDuration_TEXT, &state.keep_closed_duration, log_keep_closed_duration_changed)
 }
 
-combo :: proc(state: ^State, label, control: rl.Rectangle, value: ^c.int, action: proc()) {
-	rl.GuiLabel(at(state, label), label_text(label))
-	combo_only(state, control, value, action)
+combo :: proc(state: ^State, label: rl.Rectangle, label_text: cstring, control: rl.Rectangle, control_text: cstring, value: ^c.int, action: proc()) {
+	rl.GuiLabel(page_at(state, label), label_text)
+	combo_only(state, control, control_text, value, action)
 }
 
-// rGuiLayout keeps labels as generated constants; this maps the four file rows
-// while retaining one small drawing helper.
-label_text :: proc(label: rl.Rectangle) -> cstring {
-	if label == settings_layout.saveLabel { return settings_layout.saveLabel_TEXT }
-	if label == settings_layout.exportImageLabel { return settings_layout.exportImageLabel_TEXT }
-	if label == settings_layout.exportAnimationLabel { return settings_layout.exportAnimationLabel_TEXT }
-	return settings_layout.spriteSheetLabel_TEXT
-}
-
-combo_only :: proc(state: ^State, control: rl.Rectangle, value: ^c.int, action: proc()) {
+combo_only :: proc(state: ^State, control: rl.Rectangle, text: cstring, value: ^c.int, action: proc()) {
 	previous := value^
-	rl.GuiComboBox(at(state, control), control_text(control), value)
+	rl.GuiComboBox(page_at(state, control), text, value)
 	if value^ != previous { action() }
 }
 
-control_text :: proc(control: rl.Rectangle) -> cstring {
-	if control == settings_layout.saveFormat { return settings_layout.saveFormat_TEXT }
-	if control == settings_layout.exportImageFormat { return settings_layout.exportImageFormat_TEXT }
-	if control == settings_layout.exportAnimationFormat { return settings_layout.exportAnimationFormat_TEXT }
-	if control == settings_layout.spriteSheetFormat { return settings_layout.spriteSheetFormat_TEXT }
-	if control == settings_layout.recoveryInterval { return settings_layout.recoveryInterval_TEXT }
-	if control == settings_layout.keepEditedDuration { return settings_layout.keepEditedDuration_TEXT }
-	return settings_layout.keepClosedDuration_TEXT
-}
-
-checkbox :: proc(state: ^State, control, label: rl.Rectangle, value: ^bool, action: proc()) {
+checkbox :: proc(state: ^State, control, label: rl.Rectangle, label_text: cstring, value: ^bool, action: proc()) {
 	previous := value^
-	rl.GuiCheckBox(at(state, control), nil, value)
-	rl.GuiLabel(at(state, label), checkbox_text(label))
+	rl.GuiCheckBox(page_at(state, control), nil, value)
+	rl.GuiLabel(page_at(state, label), label_text)
 	if value^ != previous { action() }
 }
 
-checkbox_text :: proc(label: rl.Rectangle) -> cstring {
-	if label == settings_layout.fullPathLabel { return settings_layout.fullPathLabel_TEXT }
-	if label == settings_layout.autoRecoveryLabel { return settings_layout.autoRecoveryLabel_TEXT }
-	if label == settings_layout.keepEditedLabel { return settings_layout.keepEditedLabel_TEXT }
-	return settings_layout.keepClosedLabel_TEXT
-}
-
-draw_stub_page :: proc(state: ^State, title, description: cstring, action: proc()) {
-	rl.GuiLabel(at(state, settings_layout.placeholderTitle), title)
-	rl.GuiLabel(at(state, settings_layout.placeholderDescription), description)
-	if rl.GuiButton(at(state, settings_layout.placeholderAction), settings_layout.placeholderAction_TEXT) {
+draw_stub_page :: proc(state: ^State, title: rl.Rectangle, title_text: cstring, description: rl.Rectangle, description_text: cstring, button: rl.Rectangle, button_text: cstring, action: proc()) {
+	rl.GuiLabel(page_at(state, title), title_text)
+	rl.GuiLabel(page_at(state, description), description_text)
+	if rl.GuiButton(page_at(state, button), button_text) {
 		action()
 	}
 }
@@ -334,16 +335,16 @@ SHORTCUT_ROWS := [?]Shortcut_Row{
 }
 
 draw_keyboard_shortcuts_page :: proc(state: ^State) {
-	if rl.GuiTextBox(at(state, settings_layout.shortcutSearch), cstring(&state.shortcut_search[0]), len(state.shortcut_search), state.shortcut_search_editing) {
+	if rl.GuiTextBox(page_at(state, shortcuts_layout.shortcutSearch), cstring(&state.shortcut_search[0]), len(state.shortcut_search), state.shortcut_search_editing) {
 		state.shortcut_search_editing = !state.shortcut_search_editing
 		log_shortcut_search_changed()
 	}
 
-	rl.GuiLabel(at(state, settings_layout.shortcutActionHeader), settings_layout.shortcutActionHeader_TEXT)
-	rl.GuiLabel(at(state, settings_layout.shortcutKeyHeader), settings_layout.shortcutKeyHeader_TEXT)
-	rl.GuiLabel(at(state, settings_layout.shortcutContextHeader), settings_layout.shortcutContextHeader_TEXT)
+	rl.GuiLabel(page_at(state, shortcuts_layout.shortcutActionHeader), shortcuts_layout.shortcutActionHeader_TEXT)
+	rl.GuiLabel(page_at(state, shortcuts_layout.shortcutKeyHeader), shortcuts_layout.shortcutKeyHeader_TEXT)
+	rl.GuiLabel(page_at(state, shortcuts_layout.shortcutContextHeader), shortcuts_layout.shortcutContextHeader_TEXT)
 
-	viewport := at(state, settings_layout.shortcutViewport)
+	viewport := page_at(state, shortcuts_layout.shortcutViewport)
 	content := rl.Rectangle{0, 0, viewport.width - 18, f32(len(SHORTCUT_ROWS)) * 34 + 8}
 	rl.GuiScrollPanel(viewport, nil, content, &state.shortcut_scroll, &state.shortcut_view)
 
@@ -392,10 +393,10 @@ draw_keyboard_shortcuts_page :: proc(state: ^State) {
 		}
 	}
 
-	if rl.GuiButton(at(state, settings_layout.shortcutImport), settings_layout.shortcutImport_TEXT) { log_shortcut_import() }
-	if rl.GuiButton(at(state, settings_layout.shortcutExport), settings_layout.shortcutExport_TEXT) { log_shortcut_export() }
-	if rl.GuiButton(at(state, settings_layout.shortcutReset), settings_layout.shortcutReset_TEXT) { log_shortcut_reset() }
-	rl.GuiLabel(at(state, settings_layout.shortcutHint), settings_layout.shortcutHint_TEXT)
+	if rl.GuiButton(page_at(state, shortcuts_layout.shortcutImport), shortcuts_layout.shortcutImport_TEXT) { log_shortcut_import() }
+	if rl.GuiButton(page_at(state, shortcuts_layout.shortcutExport), shortcuts_layout.shortcutExport_TEXT) { log_shortcut_export() }
+	if rl.GuiButton(page_at(state, shortcuts_layout.shortcutReset), shortcuts_layout.shortcutReset_TEXT) { log_shortcut_reset() }
+	rl.GuiLabel(page_at(state, shortcuts_layout.shortcutHint), shortcuts_layout.shortcutHint_TEXT)
 }
 
 key_name :: proc(key: rl.KeyboardKey) -> cstring {
@@ -462,28 +463,28 @@ key_name :: proc(key: rl.KeyboardKey) -> cstring {
 	return "Custom Key"
 }
 
-draw_general_page :: proc(s: ^State) { draw_stub_page(s, "General", "General application behavior mock.", log_general_action) }
-draw_color_page :: proc(s: ^State) { draw_stub_page(s, "Color", "Color management and profile mock.", log_color_action) }
-draw_alerts_page :: proc(s: ^State) { draw_stub_page(s, "Alerts", "Confirmation and notification mock.", log_alerts_action) }
-draw_editor_page :: proc(s: ^State) { draw_stub_page(s, "Editor", "Editor interaction defaults mock.", log_editor_action) }
-draw_selection_page :: proc(s: ^State) { draw_stub_page(s, "Selection", "Selection behavior mock.", log_selection_action) }
-draw_timeline_page :: proc(s: ^State) { draw_stub_page(s, "Timeline", "Animation timeline preferences mock.", log_timeline_action) }
-draw_cursors_page :: proc(s: ^State) { draw_stub_page(s, "Cursors", "Cursor appearance mock.", log_cursors_action) }
-draw_background_page :: proc(s: ^State) { draw_stub_page(s, "Background", "Canvas background mock.", log_background_action) }
-draw_grid_page :: proc(s: ^State) { draw_stub_page(s, "Grid", "Pixel and tile grid mock.", log_grid_action) }
-draw_guides_and_slices_page :: proc(s: ^State) { draw_stub_page(s, "Guides & Slices", "Guide and slice behavior mock.", log_guides_action) }
-draw_undo_page :: proc(s: ^State) { draw_stub_page(s, "Undo", "Undo history limits mock.", log_undo_action) }
-draw_extensions_page :: proc(s: ^State) { draw_stub_page(s, "Extensions", "Extension discovery and permissions mock.", log_extensions_action) }
-draw_aseprite_format_page :: proc(s: ^State) { draw_stub_page(s, "Aseprite Format", "Aseprite compatibility mock.", log_aseprite_format_action) }
-draw_experimental_page :: proc(s: ^State) { draw_stub_page(s, "Experimental", "Unstable feature flags mock.", log_experimental_action) }
-draw_reset_page :: proc(s: ^State) { draw_stub_page(s, "Reset", "Reset preferences to defaults mock.", log_reset_action) }
+draw_general_page :: proc(s: ^State) { draw_stub_page(s, general_layout.title, general_layout.title_TEXT, general_layout.description, general_layout.description_TEXT, general_layout.action, general_layout.action_TEXT, log_general_action) }
+draw_color_page :: proc(s: ^State) { draw_stub_page(s, color_layout.title, color_layout.title_TEXT, color_layout.description, color_layout.description_TEXT, color_layout.action, color_layout.action_TEXT, log_color_action) }
+draw_alerts_page :: proc(s: ^State) { draw_stub_page(s, alerts_layout.title, alerts_layout.title_TEXT, alerts_layout.description, alerts_layout.description_TEXT, alerts_layout.action, alerts_layout.action_TEXT, log_alerts_action) }
+draw_editor_page :: proc(s: ^State) { draw_stub_page(s, editor_layout.title, editor_layout.title_TEXT, editor_layout.description, editor_layout.description_TEXT, editor_layout.action, editor_layout.action_TEXT, log_editor_action) }
+draw_selection_page :: proc(s: ^State) { draw_stub_page(s, selection_layout.title, selection_layout.title_TEXT, selection_layout.description, selection_layout.description_TEXT, selection_layout.action, selection_layout.action_TEXT, log_selection_action) }
+draw_timeline_page :: proc(s: ^State) { draw_stub_page(s, timeline_layout.title, timeline_layout.title_TEXT, timeline_layout.description, timeline_layout.description_TEXT, timeline_layout.action, timeline_layout.action_TEXT, log_timeline_action) }
+draw_cursors_page :: proc(s: ^State) { draw_stub_page(s, cursors_layout.title, cursors_layout.title_TEXT, cursors_layout.description, cursors_layout.description_TEXT, cursors_layout.action, cursors_layout.action_TEXT, log_cursors_action) }
+draw_background_page :: proc(s: ^State) { draw_stub_page(s, background_layout.title, background_layout.title_TEXT, background_layout.description, background_layout.description_TEXT, background_layout.action, background_layout.action_TEXT, log_background_action) }
+draw_grid_page :: proc(s: ^State) { draw_stub_page(s, grid_layout.title, grid_layout.title_TEXT, grid_layout.description, grid_layout.description_TEXT, grid_layout.action, grid_layout.action_TEXT, log_grid_action) }
+draw_guides_and_slices_page :: proc(s: ^State) { draw_stub_page(s, guides_layout.title, guides_layout.title_TEXT, guides_layout.description, guides_layout.description_TEXT, guides_layout.action, guides_layout.action_TEXT, log_guides_action) }
+draw_undo_page :: proc(s: ^State) { draw_stub_page(s, undo_layout.title, undo_layout.title_TEXT, undo_layout.description, undo_layout.description_TEXT, undo_layout.action, undo_layout.action_TEXT, log_undo_action) }
+draw_extensions_page :: proc(s: ^State) { draw_stub_page(s, extensions_layout.title, extensions_layout.title_TEXT, extensions_layout.description, extensions_layout.description_TEXT, extensions_layout.action, extensions_layout.action_TEXT, log_extensions_action) }
+draw_aseprite_format_page :: proc(s: ^State) { draw_stub_page(s, aseprite_format_layout.title, aseprite_format_layout.title_TEXT, aseprite_format_layout.description, aseprite_format_layout.description_TEXT, aseprite_format_layout.action, aseprite_format_layout.action_TEXT, log_aseprite_format_action) }
+draw_experimental_page :: proc(s: ^State) { draw_stub_page(s, experimental_layout.title, experimental_layout.title_TEXT, experimental_layout.description, experimental_layout.description_TEXT, experimental_layout.action, experimental_layout.action_TEXT, log_experimental_action) }
+draw_reset_page :: proc(s: ^State) { draw_stub_page(s, reset_layout.title, reset_layout.title_TEXT, reset_layout.description, reset_layout.description_TEXT, reset_layout.action, reset_layout.action_TEXT, log_reset_action) }
 
 draw_theme_page :: proc(state: ^State) -> bool {
-	rl.GuiGroupBox(at(state, settings_layout.themeGroup), settings_layout.themeGroup_TEXT)
-	rl.GuiLabel(at(state, settings_layout.themeLabel), settings_layout.themeLabel_TEXT)
+	rl.GuiGroupBox(page_at(state, theme_layout.themeGroup), theme_layout.themeGroup_TEXT)
+	rl.GuiLabel(page_at(state, theme_layout.themeLabel), theme_layout.themeLabel_TEXT)
 	previous := state.theme
 	if rl.GuiDropdownBox(
-		at(state, settings_layout.themeSelector),
+		page_at(state, theme_layout.themeSelector),
 		themes.SELECTOR_TEXT,
 		&state.theme,
 		state.theme_dropdown_editing,

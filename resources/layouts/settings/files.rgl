@@ -1,0 +1,29 @@
+# BitSpryte Files settings section — coordinates local to the content panel.
+r 0 0 672 566
+c 000 4 pageTitle 20 10 632 28 0 Files
+c 001 2 sectionLine 20 40 632 2 0 
+c 002 4 defaultExtensionHeading 20 54 632 24 0 Default extension for:
+c 003 4 saveLabel 20 90 220 28 0 File > Save:
+c 004 10 saveFormat 258 90 180 28 0 aseprite;png
+c 005 4 exportImageLabel 20 130 220 28 0 File > Export (one image):
+c 006 10 exportImageFormat 258 130 180 28 0 png;jpg;bmp
+c 007 4 exportAnimationLabel 20 170 220 28 0 File > Export (animation):
+c 008 10 exportAnimationFormat 258 170 180 28 0 gif;png
+c 009 4 spriteSheetLabel 20 210 220 28 0 File > Export Sprite Sheet:
+c 010 10 spriteSheetFormat 258 210 180 28 0 png;jpg
+c 011 4 recentItemsLabel 20 258 120 28 0 Recent Items:
+c 012 17 recentItems 150 262 250 20 0 0;32
+c 013 5 clearRecentButton 414 256 120 30 0 Clear
+c 014 8 fullPath 20 296 24 24 0 
+c 015 4 fullPathLabel 52 294 350 28 0 Show full file name path
+c 016 4 recoveryHeading 20 340 632 24 0 Recover Files
+c 017 2 recoveryLine 20 366 632 2 0 
+c 018 8 autoRecovery 20 386 24 24 0 
+c 019 4 autoRecoveryLabel 52 384 310 28 0 Automatically save recovery data every
+c 020 10 recoveryInterval 398 384 180 28 0 2 Minutes;5 Minutes;10 Minutes
+c 021 8 keepEdited 20 426 24 24 0 
+c 022 4 keepEditedLabel 52 424 310 28 0 Keep edited sprite data for
+c 023 10 keepEditedDuration 398 424 180 28 0 1 Week;1 Month;Forever
+c 024 8 keepClosed 20 466 24 24 0 
+c 025 4 keepClosedLabel 52 464 310 28 0 Keep closed sprite on memory for
+c 026 10 keepClosedDuration 398 464 180 28 0 15 Minutes;1 Hour;1 Day

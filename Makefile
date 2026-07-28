@@ -19,8 +19,10 @@ BIN_NAME ?= bitspryte
 BIN := $(BUILD_DIR)/$(BIN_NAME)
 GENERATED_DIR := $(BUILD_DIR)/generated
 GENERATED_LAYOUT := $(GENERATED_DIR)/layout/layout.odin
-GENERATED_SETTINGS_LAYOUT := $(GENERATED_DIR)/settings_layout/settings_layout.odin
-GENERATED_LAYOUTS := $(GENERATED_LAYOUT) $(GENERATED_SETTINGS_LAYOUT)
+SETTINGS_LAYOUT_DIR := resources/layouts/settings
+SETTINGS_SECTIONS := window general files keyboard_shortcuts color alerts editor selection timeline cursors background grid guides_and_slices undo theme extensions aseprite_format experimental reset
+GENERATED_SETTINGS_LAYOUTS := $(foreach section,$(SETTINGS_SECTIONS),$(GENERATED_DIR)/settings_$(section)/settings_$(section).odin)
+GENERATED_LAYOUTS := $(GENERATED_LAYOUT) $(GENERATED_SETTINGS_LAYOUTS)
 RESOURCE_BUILD_DIR := $(BUILD_DIR)/resources
 RESOURCE_STAMP := $(RESOURCE_BUILD_DIR)/.stamp
 NATIVE_DIR := $(BUILD_DIR)/native
@@ -54,7 +56,8 @@ NATIVE_DEPS :=
 ODIN_NATIVE_FLAGS :=
 endif
 LAYOUT_SOURCE ?= resources/layouts/main.rgl
-SETTINGS_LAYOUT_SOURCE := resources/layouts/settings.rgl
+SETTINGS_SECTION ?= window
+SETTINGS_LAYOUT_SOURCE := $(SETTINGS_LAYOUT_DIR)/$(SETTINGS_SECTION).rgl
 STYLE_SOURCE ?= resources/styles/dark.rgs
 ICON_SOURCE ?= resources/icons/bitspryte.rgi
 
@@ -114,9 +117,13 @@ $(GENERATED_LAYOUT): $(LAYOUT_SOURCE) tools/rgl_to_odin.py
 	$(Q)echo "Generating Odin layout from $<..."
 	$(Q)$(PYTHON) tools/rgl_to_odin.py "$<" "$@" --package layout
 
-$(GENERATED_SETTINGS_LAYOUT): $(SETTINGS_LAYOUT_SOURCE) tools/rgl_to_odin.py
-	$(Q)echo "Generating Odin settings layout from $<..."
-	$(Q)$(PYTHON) tools/rgl_to_odin.py "$<" "$@" --package settings_layout
+define SETTINGS_LAYOUT_RULE
+$(GENERATED_DIR)/settings_$(1)/settings_$(1).odin: $(SETTINGS_LAYOUT_DIR)/$(1).rgl tools/rgl_to_odin.py
+	$$(Q)echo "Generating Odin settings/$(1) layout..."
+	$$(Q)$$(PYTHON) tools/rgl_to_odin.py "$$<" "$$@" --package settings_$(1)
+endef
+
+$(foreach section,$(SETTINGS_SECTIONS),$(eval $(call SETTINGS_LAYOUT_RULE,$(section))))
 
 $(RESOURCE_STAMP): $(RESOURCE_SOURCES) | $(BUILD_DIR)
 	$(Q)echo "Copying raygui resources..."
@@ -135,6 +142,7 @@ layout-edit:
 	$(Q)"$(RGUI_LAYOUT)" "$(LAYOUT_SOURCE)"
 
 settings-layout-edit:
+	$(Q)test -f "$(SETTINGS_LAYOUT_SOURCE)" || { echo "Unknown SETTINGS_SECTION=$(SETTINGS_SECTION). Available: $(SETTINGS_SECTIONS)" >&2; exit 1; }
 	$(Q)command -v "$(RGUI_LAYOUT)" >/dev/null || { echo "rGuiLayout not found; set RGUI_LAYOUT=/path/to/executable" >&2; exit 1; }
 	$(Q)"$(RGUI_LAYOUT)" "$(SETTINGS_LAYOUT_SOURCE)"
 
@@ -155,7 +163,9 @@ export-raygui-code: | $(BUILD_DIR)
 	$(Q)command -v "$(RGUI_ICONS)" >/dev/null || { echo "rGuiIcons not found" >&2; exit 1; }
 	$(Q)mkdir -p "$(BUILD_DIR)/raygui-code"
 	$(Q)"$(RGUI_LAYOUT)" --input "$(LAYOUT_SOURCE)" --output "$(BUILD_DIR)/raygui-code/layout.h"
-	$(Q)"$(RGUI_LAYOUT)" --input "$(SETTINGS_LAYOUT_SOURCE)" --output "$(BUILD_DIR)/raygui-code/settings_layout.h"
+	$(Q)for section in $(SETTINGS_SECTIONS); do \
+		"$(RGUI_LAYOUT)" --input "$(SETTINGS_LAYOUT_DIR)/$$section.rgl" --output "$(BUILD_DIR)/raygui-code/settings_$$section.h"; \
+	done
 	$(Q)"$(RGUI_STYLER)" --input "$(STYLE_SOURCE)" --output "$(BUILD_DIR)/raygui-code/style.h" --format 2
 	$(Q)test -f "$(BUILD_DIR)/raygui-code/style.h.h" && mv "$(BUILD_DIR)/raygui-code/style.h.h" "$(BUILD_DIR)/raygui-code/style.h" || true
 	$(Q)"$(RGUI_ICONS)" --input "$(ICON_SOURCE)" --output "$(BUILD_DIR)/raygui-code/icons.h"

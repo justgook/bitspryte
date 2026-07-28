@@ -1,0 +1,11 @@
+# BitSpryte Keyboard Shortcuts settings section — flat, no submenus.
+r 0 0 672 566
+c 000 12 shortcutSearch 20 50 632 30 0 Search shortcuts
+c 001 4 shortcutActionHeader 32 90 330 26 0 Action
+c 002 4 shortcutKeyHeader 374 90 130 26 0 Key
+c 003 4 shortcutContextHeader 514 90 126 26 0 Context
+c 004 20 shortcutViewport 20 118 632 336 0 
+c 005 5 shortcutImport 20 472 120 30 0 Import
+c 006 5 shortcutExport 152 472 120 30 0 Export
+c 007 5 shortcutReset 284 472 120 30 0 Reset
+c 008 4 shortcutHint 20 514 632 28 0 Close Active Window can be rebound now; other rows remain mock actions.

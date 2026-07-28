@@ -16,4 +16,4 @@ Current scope:
 
 _Pending hands-on review._
 
-When the structure is accepted, replace the logging callbacks with a settings model and persistence, then remove this prototype marker. If rejected, delete `ui/settings_panel/` and `resources/layouts/settings.rgl` rather than evolving the mock indefinitely.
+When the structure is accepted, replace the logging callbacks with a settings model and persistence, then remove this prototype marker. If rejected, delete `ui/settings_panel/` and `resources/layouts/settings/` rather than evolving the mock indefinitely.
