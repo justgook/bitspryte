@@ -1,0 +1,56 @@
+#
+# PROTOTYPE: BitSpryte settings window (rGuiLayout v4.0)
+# Edit with: rGuiLayout resources/layouts/settings.rgl
+# Coordinates are local to the draggable settings window.
+#
+r 0 0 900 680
+c 000 0 window 0 0 900 680 0 Preferences
+c 001 12 search 18 42 176 30 0 Search
+c 002 21 categories 18 82 176 526 0 General;Files;Keyboard Shortcuts;Color;Alerts;Editor;Selection;Timeline;Cursors;Background;Grid;Guides & Slices;Undo;Theme;Extensions;Aseprite Format;Experimental;Reset
+c 003 3 contentPanel 210 42 672 566 0 
+c 004 2 footerLine 18 624 864 2 0 
+c 005 5 okButton 496 638 120 30 0 OK
+c 006 5 applyButton 628 638 120 30 0 Apply
+c 007 5 cancelButton 760 638 120 30 0 Cancel
+c 008 4 pageTitle 230 52 632 28 0 Files
+c 009 2 sectionLine 230 82 632 2 0 
+c 010 4 defaultExtensionHeading 230 96 632 24 0 Default extension for:
+c 011 4 saveLabel 230 132 220 28 0 File > Save:
+c 012 10 saveFormat 468 132 180 28 0 aseprite;png
+c 013 4 exportImageLabel 230 172 220 28 0 File > Export (one image):
+c 014 10 exportImageFormat 468 172 180 28 0 png;jpg;bmp
+c 015 4 exportAnimationLabel 230 212 220 28 0 File > Export (animation):
+c 016 10 exportAnimationFormat 468 212 180 28 0 gif;png
+c 017 4 spriteSheetLabel 230 252 220 28 0 File > Export Sprite Sheet:
+c 018 10 spriteSheetFormat 468 252 180 28 0 png;jpg
+c 019 4 recentItemsLabel 230 300 120 28 0 Recent Items:
+c 020 17 recentItems 360 304 250 20 0 0;32
+c 021 5 clearRecentButton 624 298 120 30 0 Clear
+c 022 8 fullPath 230 338 24 24 0 
+c 023 4 fullPathLabel 262 336 350 28 0 Show full file name path
+c 024 4 recoveryHeading 230 382 632 24 0 Recover Files
+c 025 2 recoveryLine 230 408 632 2 0 
+c 026 8 autoRecovery 230 428 24 24 0 
+c 027 4 autoRecoveryLabel 262 426 310 28 0 Automatically save recovery data every
+c 028 10 recoveryInterval 608 426 180 28 0 2 Minutes;5 Minutes;10 Minutes
+c 029 8 keepEdited 230 468 24 24 0 
+c 030 4 keepEditedLabel 262 466 310 28 0 Keep edited sprite data for
+c 031 10 keepEditedDuration 608 466 180 28 0 1 Week;1 Month;Forever
+c 032 8 keepClosed 230 508 24 24 0 
+c 033 4 keepClosedLabel 262 506 310 28 0 Keep closed sprite on memory for
+c 034 10 keepClosedDuration 608 506 180 28 0 15 Minutes;1 Hour;1 Day
+c 035 4 placeholderTitle 242 122 600 32 0 Settings page
+c 036 4 placeholderDescription 242 170 600 72 0 This page is connected to its own mock function.
+c 037 5 placeholderAction 242 264 190 32 0 Run Mock Action
+c 038 1 themeGroup 230 106 632 458 0 APPLICATION THEME
+c 039 4 themeLabel 250 136 580 24 0 Select a raygui style resource:
+c 040 11 themeSelector 250 174 280 26 0 Default;Amber;Ashes;Bluish;Candy;Cherry;Cyber;Dark;Enefete;Genesis;Jungle;Lavanda;RLTech;Sunny;Terminal
+c 041 12 shortcutSearch 230 92 632 30 0 Search shortcuts
+c 042 4 shortcutActionHeader 242 132 330 26 0 Action
+c 043 4 shortcutKeyHeader 584 132 130 26 0 Key
+c 044 4 shortcutContextHeader 724 132 126 26 0 Context
+c 045 20 shortcutViewport 230 160 632 336 0 
+c 046 5 shortcutImport 230 514 120 30 0 Import
+c 047 5 shortcutExport 362 514 120 30 0 Export
+c 048 5 shortcutReset 494 514 120 30 0 Reset
+c 049 4 shortcutHint 230 556 632 28 0 Close Active Window can be rebound now; other rows remain mock actions.

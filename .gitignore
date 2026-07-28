@@ -1,0 +1,22 @@
+# Build outputs
+/build/
+/build.nosync/
+/bitspryte
+/bitspryte.exe
+/bitspryte.png
+*.dSYM/
+
+# Odin tooling
+.odin-cache/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor and local environment
+*.swp
+*.swo
+*~
+.env
+.env.local
