@@ -76,6 +76,9 @@ typedef NS_ENUM(NSInteger, BSAction) {
     BSActionLayerNewReferenceFromFile,
     BSActionLayerNewTilemap,
     BSActionLayerDelete,
+    BSActionLayerConvertToBackground,
+    BSActionLayerConvertToLayer,
+    BSActionLayerConvertToTilemap,
     BSActionLayerDuplicate,
     BSActionLayerMergeDown,
     BSActionLayerFlatten,
@@ -362,7 +365,15 @@ void bs_native_menu_install(void)
         AddAction(newLayer, @"New Reference Layer from File", BSActionLayerNewReferenceFromFile, @"");
         AddAction(newLayer, @"New Tilemap Layer", BSActionLayerNewTilemap, @"");
         AddAction(layer, @"Delete Layer", BSActionLayerDelete, @"");
-        AddMenu(layer, @"Convert To…");
+        NSMenu *convertTo = AddMenu(layer, @"Convert To…");
+        [convertTo setAutoenablesItems:NO];
+        NSMenuItem *convertToBackground = AddAction(convertTo, @"Background", BSActionLayerConvertToBackground, @"");
+        [convertToBackground setEnabled:NO];
+        NSMenuItem *convertToLayer = AddAction(convertTo, @"Layer", BSActionLayerConvertToLayer, @"");
+        [convertToLayer setEnabled:NO];
+        [convertTo addItem:[NSMenuItem separatorItem]];
+        NSMenuItem *convertToTilemap = AddAction(convertTo, @"Tilemap", BSActionLayerConvertToTilemap, @"");
+        [convertToTilemap setEnabled:NO];
         [layer addItem:[NSMenuItem separatorItem]];
         AddAction(layer, @"Duplicate", BSActionLayerDuplicate, @"");
         NSMenuItem *mergeDown = AddAction(layer, @"Merge Down", BSActionLayerMergeDown, @"");
