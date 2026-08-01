@@ -1,8 +1,10 @@
 package main
 
+import events "./app/events"
 import drawing "./drawing"
 import checkerboard "./editor/checkerboard"
 import overlay "./editor/overlay"
+import native_menu "./platform/native_menu"
 import compositor "./render/compositor"
 import cpu_framebuffer "./render/cpu_framebuffer"
 import runtime "base:runtime"
@@ -32,6 +34,7 @@ cursor_point: drawing.Point
 cursor_inside: bool
 shift_held: bool
 checkerboard_config: checkerboard.Config
+event_bus: events.Bus
 
 canvas_viewport :: proc() -> Viewport {
 	window_width := sapp.widthf()
@@ -46,6 +49,25 @@ canvas_viewport :: proc() -> Viewport {
 	return {x = (window_width - width) * 0.5, y = (window_height - height) * 0.5, width = width, height = height}
 }
 
+clear_canvas_requested :: proc(event: events.Event, _: rawptr) {
+	checkerboard.fill(&canvas, checkerboard_config)
+	overlay.clear(&preview_overlay)
+	drawing.reset_stroke(&paint_stroke)
+	drawing.cancel_line_preview(&line_preview)
+	events.publish(&event_bus, events.make(.Canvas_Cleared, event.source))
+}
+
+dispatch_native_menu :: proc() {
+	#partial switch native_menu.take_action() {
+	case .Settings:
+		events.publish(&event_bus, events.make(.Open_Settings_Requested, .Native_Menu))
+	case .Export_PNG:
+		events.publish(&event_bus, events.make(.Export_PNG_Requested, .Native_Menu))
+	case .Clear_Canvas:
+		events.publish(&event_bus, events.make(.Clear_Canvas_Requested, .Native_Menu))
+	}
+}
+
 init :: proc "c" () {
 	context = runtime.default_context()
 
@@ -58,11 +80,14 @@ init :: proc "c" () {
 
 	checkerboard_config = checkerboard.default_config()
 	checkerboard.fill(&canvas, checkerboard_config)
+	events.subscribe(&event_bus, .Clear_Canvas_Requested, clear_canvas_requested)
+	native_menu.install()
 }
 
 frame :: proc "c" () {
 	context = runtime.default_context()
 
+	dispatch_native_menu()
 	cpu_framebuffer.upload_if_dirty(&canvas)
 	overlay.upload_if_dirty(&preview_overlay)
 
@@ -84,6 +109,7 @@ frame :: proc "c" () {
 cleanup :: proc "c" () {
 	context = runtime.default_context()
 
+	events.destroy(&event_bus)
 	compositor.shutdown(&texture_compositor)
 	overlay.deinit(&preview_overlay)
 	cpu_framebuffer.deinit(&canvas)
@@ -189,6 +215,7 @@ event :: proc "c" (event: ^sapp.Event) {
 
 			drawing.commit_and_continue_line_preview(&line_preview, plot_canvas_pixel)
 			drawing.set_endpoint(&paint_stroke, cursor_point)
+			events.publish(&event_bus, events.make(.Canvas_Changed, .Pointer))
 			overlay.redraw_line(&preview_overlay, cursor_point, cursor_point, stroke_color)
 		} else {
 			drawing.begin_stroke(&paint_stroke, cursor_point, false, plot_canvas_pixel)
@@ -215,7 +242,10 @@ event :: proc "c" (event: ^sapp.Event) {
 
 	case .MOUSE_UP:
 		if !shift_held && (event.mouse_button == .LEFT || event.mouse_button == .RIGHT) {
-			drawing.end_stroke(&paint_stroke)
+			if drawing.is_active(&paint_stroke) {
+				drawing.end_stroke(&paint_stroke)
+				events.publish(&event_bus, events.make(.Canvas_Changed, .Pointer))
+			}
 		}
 	}
 }

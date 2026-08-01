@@ -21,10 +21,18 @@ make          # debug build
 make run      # debug build and run
 make release  # optimized build
 make check    # type-check
-make test     # test stroke rasterization
+make test     # run application logic tests
 ```
 
 The first build downloads the Odin Sokol bindings and compiles the native Sokol libraries used by the application. Dependencies are kept in the ignored `sokol/` directory; outputs go to `build.nosync/`.
+
+## Events and native menu
+
+`app/events` is a synchronous publish/subscribe bus. Subsystems subscribe to one event kind or `.Any`, receive events without knowing their input source, and can publish follow-up facts from handlers. Subscriptions can be removed explicitly.
+
+Requests and completed facts are separate. For example, the macOS Edit menu publishes `Clear_Canvas_Requested`; the canvas subscriber performs the work and publishes `Canvas_Cleared`. Pointer edits publish `Canvas_Changed` through the same bus.
+
+On macOS, `platform/native_menu` installs native BitSpryte, File, Edit, and Window menus. Settings, PNG export, and canvas-clear menu commands enter the application exclusively through the event bus. The bridge is a small Objective-C static library; non-macOS builds use a no-op implementation.
 
 ## CPU framebuffer package
 

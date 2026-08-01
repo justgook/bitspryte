@@ -15,6 +15,7 @@ endif
 ODIN ?= odin
 CC ?= cc
 AR ?= ar
+CLANG ?= xcrun clang
 CURL ?= curl -L
 TAR ?= tar
 BUILD_DIR ?= build.nosync
@@ -24,6 +25,9 @@ SOKOL_DIR ?= sokol
 SOKOL_VERSION ?= master
 SOKOL_URL ?= https://github.com/floooh/sokol-odin/archive/refs/heads/$(SOKOL_VERSION).tar.gz
 SOKOL_STAMP := $(SOKOL_DIR)/.downloaded
+NATIVE_DIR := $(BUILD_DIR)/native
+NATIVE_OBJECT := $(NATIVE_DIR)/native_menu.o
+NATIVE_LIBRARY := $(NATIVE_DIR)/libbitspryte_native.a
 PROFILE ?= debug
 
 UNAME_S := $(shell uname -s)
@@ -36,6 +40,7 @@ ifeq ($(UNAME_S),Darwin)
   SOKOL_ARCH := $(if $(filter arm64,$(UNAME_M)),arm64,x64)
   CFLAGS_PLATFORM := -x objective-c -arch $(if $(filter arm64,$(UNAME_M)),arm64,x86_64)
   ODIN_ENV := PATH="$(dir $(shell xcrun -f clang)):$${PATH}"
+  NATIVE_DEPS := $(NATIVE_LIBRARY)
 else ifeq ($(UNAME_S),Linux)
   ifneq ($(UNAME_M),x86_64)
     $(error Linux currently requires x86_64)
@@ -46,6 +51,7 @@ else ifeq ($(UNAME_S),Linux)
   SOKOL_ARCH := x64
   CFLAGS_PLATFORM := -pthread
   ODIN_ENV :=
+  NATIVE_DEPS :=
 else
   $(error Unsupported platform: $(UNAME_S)/$(UNAME_M))
 endif
@@ -72,17 +78,18 @@ run: $(BIN)
 release:
 	$(Q)$(MAKE) build PROFILE=release BIN="$(BUILD_DIR)/$(BIN_NAME)-release"
 
-check: $(SOKOL_LIBS) | $(BUILD_DIR)
+check: $(SOKOL_LIBS) $(NATIVE_DEPS) | $(BUILD_DIR)
 	$(Q)$(ODIN_ENV) $(ODIN) check . -debug
 
 test: $(SOKOL_LIBS) | $(BUILD_DIR)
 	$(Q)mkdir -p "$(BUILD_DIR)/tests"
 	$(Q)$(ODIN_ENV) $(ODIN) test tests/drawing -debug -out:"$(BUILD_DIR)/tests/drawing"
 	$(Q)$(ODIN_ENV) $(ODIN) test tests/checkerboard -debug -out:"$(BUILD_DIR)/tests/checkerboard"
+	$(Q)$(ODIN_ENV) $(ODIN) test tests/events -debug -out:"$(BUILD_DIR)/tests/events"
 
 deps: $(SOKOL_LIBS)
 
-$(BIN): $(ODIN_SOURCES) $(SOKOL_LIBS) | $(BUILD_DIR)
+$(BIN): $(ODIN_SOURCES) $(SOKOL_LIBS) $(NATIVE_DEPS) | $(BUILD_DIR)
 	$(Q)echo "Building $(BIN_NAME) ($(PROFILE))"
 	$(Q)$(ODIN_ENV) $(ODIN) build . $(ODIN_FLAGS) -out:"$@"
 
@@ -98,6 +105,13 @@ $(SOKOL_STAMP): | $(BUILD_DIR)
 	touch "$@"; \
 	rm -rf "$$tmp" "$$archive"
 
+$(NATIVE_LIBRARY): $(NATIVE_OBJECT)
+	$(Q)$(AR) rcs "$@" "$<"
+
+$(NATIVE_OBJECT): platform/native_menu/native_menu.m | $(NATIVE_DIR)
+	$(Q)echo "Compiling native macOS menu"
+	$(Q)$(CLANG) -fobjc-arc -Wall -Wextra -c "$<" -o "$@"
+
 $(SOKOL_LIBS): $(SOKOL_STAMP)
 	$(Q)module="$$(basename "$$(dirname "$@")")"; \
 	echo "Compiling sokol_$$module ($(PROFILE))"; \
@@ -107,7 +121,7 @@ $(SOKOL_LIBS): $(SOKOL_STAMP)
 	$(AR) rcs "$@" "$$obj"; \
 	rm -f "$$obj"
 
-$(BUILD_DIR):
+$(BUILD_DIR) $(NATIVE_DIR):
 	$(Q)mkdir -p "$@"
 
 clean:
@@ -120,6 +134,6 @@ help:
 		'  run      Build and run' \
 		'  release  Build an optimized executable' \
 		'  check    Type-check the project' \
-		'  test     Run drawing logic tests' \
+		'  test     Run application logic tests' \
 		'  deps     Download and compile Sokol dependencies' \
 		'  clean    Remove build output'
