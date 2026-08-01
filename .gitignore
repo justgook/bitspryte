@@ -1,0 +1,4 @@
+build.nosync/
+sokol/
+*.bin.dSYM/
+.DS_Store
