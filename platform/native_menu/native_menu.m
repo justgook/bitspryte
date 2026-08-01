@@ -125,19 +125,37 @@ typedef NS_ENUM(NSInteger, BSAction) {
     BSActionSelectLoad,
     BSActionSelectSave,
     BSActionViewDuplicate,
+    BSActionViewWorkspaceLayout,
+    BSActionViewRunCommand,
     BSActionViewShowExtras,
+    BSActionViewShowLayerEdges,
+    BSActionViewShowSelectionEdges,
     BSActionViewShowGrid,
+    BSActionViewShowAutoGuides,
+    BSActionViewShowSlices,
     BSActionViewShowPixelGrid,
+    BSActionViewShowTileNumbers,
+    BSActionViewShowBrushPreview,
+    BSActionViewGridSettings,
+    BSActionViewSelectionAsGrid,
     BSActionViewSnapToGrid,
     BSActionViewTiledNone,
     BSActionViewTiledBoth,
     BSActionViewTiledX,
     BSActionViewTiledY,
+    BSActionViewSymmetryOptions,
+    BSActionViewSetLoopSection,
     BSActionViewOnionSkin,
     BSActionViewTimeline,
     BSActionViewPreview,
+    BSActionViewPreviewHideOtherLayers,
+    BSActionViewPreviewBrush,
+    BSActionViewAdvancedMode,
     BSActionViewFullscreen,
+    BSActionViewFullscreenPreview,
+    BSActionViewHome,
     BSActionViewRefresh,
+    BSActionViewEnterFullscreen,
     BSActionWindowMinimize,
     BSActionWindowZoom,
     BSActionWindowBringAllToFront,
@@ -172,6 +190,20 @@ static NSInteger pendingAction = BSActionNone;
             [selectedItem setState:NSControlStateValueOn];
             break;
         }
+        case BSActionViewTiledNone:
+        case BSActionViewTiledBoth:
+        case BSActionViewTiledX:
+        case BSActionViewTiledY: {
+            NSMenuItem *selectedItem = (NSMenuItem *)sender;
+            for (NSMenuItem *item in [[selectedItem menu] itemArray]) {
+                NSInteger tag = [item tag];
+                if (tag >= BSActionViewTiledNone && tag <= BSActionViewTiledY) {
+                    [item setState:NSControlStateValueOff];
+                }
+            }
+            [selectedItem setState:NSControlStateValueOn];
+            break;
+        }
         case BSActionPlaybackSpeed025:
         case BSActionPlaybackSpeed05:
         case BSActionPlaybackSpeed1:
@@ -195,11 +227,27 @@ static NSInteger pendingAction = BSActionNone;
         case BSActionPlaybackPlayAllFrames:
         case BSActionPlaybackPlaySubtagsRepetitions:
         case BSActionPlaybackRewindOnStop:
-        case BSActionFrameConstantRate: {
+        case BSActionFrameConstantRate:
+        case BSActionViewShowExtras:
+        case BSActionViewShowLayerEdges:
+        case BSActionViewShowSelectionEdges:
+        case BSActionViewShowGrid:
+        case BSActionViewShowAutoGuides:
+        case BSActionViewShowSlices:
+        case BSActionViewShowPixelGrid:
+        case BSActionViewShowTileNumbers:
+        case BSActionViewShowBrushPreview:
+        case BSActionViewSnapToGrid:
+        case BSActionViewSymmetryOptions:
+        case BSActionViewOnionSkin:
+        case BSActionViewTimeline: {
             NSMenuItem *item = (NSMenuItem *)sender;
             [item setState:[item state] == NSControlStateValueOn ? NSControlStateValueOff : NSControlStateValueOn];
             break;
         }
+        case BSActionViewEnterFullscreen:
+            [[NSApp keyWindow] toggleFullScreen:sender];
+            break;
         case BSActionWindowMinimize:
             [[NSApp keyWindow] performMiniaturize:sender];
             break;
@@ -507,23 +555,80 @@ void bs_native_menu_install(void)
 
         NSMenu *view = AddMenu(main, @"View");
         AddAction(view, @"Duplicate View", BSActionViewDuplicate, @"");
-        AddAction(view, @"Show Extras", BSActionViewShowExtras, @"");
+        NSMenuItem *workspaceLayout = AddAction(view, @"Workspace Layout", BSActionViewWorkspaceLayout, @"w");
+        [workspaceLayout setKeyEquivalentModifierMask:NSEventModifierFlagShift];
+        NSMenuItem *runCommand = AddAction(view, @"Run Command", BSActionViewRunCommand, @" ");
+        [runCommand setKeyEquivalentModifierMask:NSEventModifierFlagControl];
+        [view addItem:[NSMenuItem separatorItem]];
+
+        NSMenuItem *extras = AddAction(view, @"Extras", BSActionViewShowExtras, @"h");
+        [extras setKeyEquivalentModifierMask:NSEventModifierFlagControl];
+        [extras setState:NSControlStateValueOn];
         NSMenu *show = AddMenu(view, @"Show");
-        AddAction(show, @"Grid", BSActionViewShowGrid, @"");
-        AddAction(show, @"Pixel Grid", BSActionViewShowPixelGrid, @"");
-        AddAction(show, @"Snap to Grid", BSActionViewSnapToGrid, @"");
+        AddAction(show, @"Layer Edges", BSActionViewShowLayerEdges, @"");
+        NSMenuItem *selectionEdges = AddAction(show, @"Selection Edges", BSActionViewShowSelectionEdges, @"");
+        [selectionEdges setState:NSControlStateValueOn];
+        AddAction(show, @"Grid", BSActionViewShowGrid, @"'");
+        NSMenuItem *autoGuides = AddAction(show, @"Auto Guides", BSActionViewShowAutoGuides, @"");
+        [autoGuides setState:NSControlStateValueOn];
+        NSMenuItem *slices = AddAction(show, @"Slices", BSActionViewShowSlices, @"");
+        [slices setState:NSControlStateValueOn];
+        NSMenuItem *pixelGrid = AddAction(show, @"Pixel Grid", BSActionViewShowPixelGrid, @"'");
+        [pixelGrid setKeyEquivalentModifierMask:NSEventModifierFlagCommand | NSEventModifierFlagShift];
+        NSMenuItem *tileNumbers = AddAction(show, @"Tile Numbers", BSActionViewShowTileNumbers, @"");
+        [tileNumbers setState:NSControlStateValueOn];
+        [show addItem:[NSMenuItem separatorItem]];
+        NSMenuItem *showBrushPreview = AddAction(show, @"Brush Preview", BSActionViewShowBrushPreview, @"");
+        [showBrushPreview setState:NSControlStateValueOn];
+        [view addItem:[NSMenuItem separatorItem]];
+
+        NSMenu *grid = AddMenu(view, @"Grid");
+        AddAction(grid, @"Grid Settings", BSActionViewGridSettings, @"");
+        AddAction(grid, @"Selection as Grid", BSActionViewSelectionAsGrid, @"");
+        NSMenuItem *snapToGrid = AddAction(grid, @"Snap to Grid", BSActionViewSnapToGrid, @"s");
+        [snapToGrid setKeyEquivalentModifierMask:NSEventModifierFlagShift];
         NSMenu *tiled = AddMenu(view, @"Tiled Mode");
-        AddAction(tiled, @"None", BSActionViewTiledNone, @"");
-        AddAction(tiled, @"Both Axes", BSActionViewTiledBoth, @"");
-        AddAction(tiled, @"Horizontal", BSActionViewTiledX, @"");
-        AddAction(tiled, @"Vertical", BSActionViewTiledY, @"");
+        NSMenuItem *tiledNone = AddAction(tiled, @"None", BSActionViewTiledNone, @"");
+        [tiledNone setState:NSControlStateValueOn];
+        AddAction(tiled, @"Tiled in Both Axes", BSActionViewTiledBoth, @"");
+        AddAction(tiled, @"Tiled in X Axis", BSActionViewTiledX, @"");
+        AddAction(tiled, @"Tiled in Y Axis", BSActionViewTiledY, @"");
+        NSMenuItem *symmetryOptions = AddAction(view, @"Symmetry Options", BSActionViewSymmetryOptions, @"");
+        [symmetryOptions setState:NSControlStateValueOn];
         [view addItem:[NSMenuItem separatorItem]];
-        AddAction(view, @"Onion Skin", BSActionViewOnionSkin, @"");
-        AddAction(view, @"Timeline", BSActionViewTimeline, @"");
-        AddAction(view, @"Preview", BSActionViewPreview, @"");
-        AddAction(view, @"Fullscreen", BSActionViewFullscreen, @"");
+
+        AddAction(view, @"Set Loop Section", BSActionViewSetLoopSection, @"");
+        NSString *f3Key = [NSString stringWithFormat:@"%C", (unichar)NSF3FunctionKey];
+        NSMenuItem *showOnionSkin = AddAction(view, @"Show Onion Skin", BSActionViewOnionSkin, f3Key);
+        [showOnionSkin setKeyEquivalentModifierMask:0];
         [view addItem:[NSMenuItem separatorItem]];
-        AddAction(view, @"Refresh", BSActionViewRefresh, @"");
+
+        NSMenuItem *timeline = AddAction(view, @"Timeline", BSActionViewTimeline, @"\t");
+        [timeline setKeyEquivalentModifierMask:0];
+        [timeline setState:NSControlStateValueOn];
+        NSMenu *preview = AddMenu(view, @"Preview");
+        NSString *f7Key = [NSString stringWithFormat:@"%C", (unichar)NSF7FunctionKey];
+        NSMenuItem *previewAction = AddAction(preview, @"Preview", BSActionViewPreview, f7Key);
+        [previewAction setKeyEquivalentModifierMask:0];
+        [preview addItem:[NSMenuItem separatorItem]];
+        NSMenuItem *hideOtherLayers = AddAction(preview, @"Hide Other Layers", BSActionViewPreviewHideOtherLayers, f7Key);
+        [hideOtherLayers setKeyEquivalentModifierMask:NSEventModifierFlagShift];
+        AddAction(preview, @"Brush Preview", BSActionViewPreviewBrush, @"");
+        NSMenuItem *advancedMode = AddAction(view, @"Advanced Mode", BSActionViewAdvancedMode, @"f");
+        [advancedMode setKeyEquivalentModifierMask:NSEventModifierFlagControl];
+        NSMenuItem *fullScreenMode = AddAction(view, @"Full Screen Mode", BSActionViewFullscreen, @"f");
+        [fullScreenMode setKeyEquivalentModifierMask:NSEventModifierFlagCommand | NSEventModifierFlagControl];
+        NSString *f8Key = [NSString stringWithFormat:@"%C", (unichar)NSF8FunctionKey];
+        NSMenuItem *fullScreenPreview = AddAction(view, @"Full Screen Preview", BSActionViewFullscreenPreview, f8Key);
+        [fullScreenPreview setKeyEquivalentModifierMask:0];
+        AddAction(view, @"Home", BSActionViewHome, @"");
+        [view addItem:[NSMenuItem separatorItem]];
+
+        NSString *f5Key = [NSString stringWithFormat:@"%C", (unichar)NSF5FunctionKey];
+        NSMenuItem *refresh = AddAction(view, @"Refresh & Reload Theme", BSActionViewRefresh, f5Key);
+        [refresh setKeyEquivalentModifierMask:0];
+        NSMenuItem *enterFullscreen = AddAction(view, @"Enter Full Screen", BSActionViewEnterFullscreen, @"f");
+        [enterFullscreen setKeyEquivalentModifierMask:NSEventModifierFlagFunction];
 
         NSMenu *window = AddMenu(main, @"Window");
         AddAction(window, @"Minimize", BSActionWindowMinimize, @"m");
