@@ -91,12 +91,28 @@ typedef NS_ENUM(NSInteger, BSAction) {
     BSActionFrameDuplicateLinked,
     BSActionFrameDelete,
     BSActionAnimationPlay,
+    BSActionAnimationPlayPreview,
+    BSActionPlaybackSpeed025,
+    BSActionPlaybackSpeed05,
+    BSActionPlaybackSpeed1,
+    BSActionPlaybackSpeed15,
+    BSActionPlaybackSpeed2,
+    BSActionPlaybackSpeed3,
+    BSActionPlaybackPlayOnce,
+    BSActionPlaybackPlayAllFrames,
+    BSActionPlaybackPlaySubtagsRepetitions,
+    BSActionPlaybackRewindOnStop,
+    BSActionFrameTagProperties,
     BSActionFrameTagNew,
     BSActionFrameTagDelete,
     BSActionFrameFirst,
     BSActionFramePrevious,
     BSActionFrameNext,
     BSActionFrameLast,
+    BSActionFrameFirstInTag,
+    BSActionFrameLastInTag,
+    BSActionFrameGoTo,
+    BSActionFrameConstantRate,
     BSActionFrameReverse,
     BSActionSelectAll,
     BSActionSelectDeselect,
@@ -156,9 +172,30 @@ static NSInteger pendingAction = BSActionNone;
             [selectedItem setState:NSControlStateValueOn];
             break;
         }
+        case BSActionPlaybackSpeed025:
+        case BSActionPlaybackSpeed05:
+        case BSActionPlaybackSpeed1:
+        case BSActionPlaybackSpeed15:
+        case BSActionPlaybackSpeed2:
+        case BSActionPlaybackSpeed3: {
+            NSMenuItem *selectedItem = (NSMenuItem *)sender;
+            for (NSMenuItem *item in [[selectedItem menu] itemArray]) {
+                NSInteger tag = [item tag];
+                if (tag >= BSActionPlaybackSpeed025 && tag <= BSActionPlaybackSpeed3) {
+                    [item setState:NSControlStateValueOff];
+                }
+            }
+            [selectedItem setState:NSControlStateValueOn];
+            break;
+        }
         case BSActionLayerVisible:
         case BSActionLayerLock:
-        case BSActionLayerOpenGroup: {
+        case BSActionLayerOpenGroup:
+        case BSActionPlaybackPlayOnce:
+        case BSActionPlaybackPlayAllFrames:
+        case BSActionPlaybackPlaySubtagsRepetitions:
+        case BSActionPlaybackRewindOnStop:
+        case BSActionFrameConstantRate: {
             NSMenuItem *item = (NSMenuItem *)sender;
             [item setState:[item state] == NSControlStateValueOn ? NSControlStateValueOff : NSControlStateValueOn];
             break;
@@ -382,26 +419,72 @@ void bs_native_menu_install(void)
         AddAction(layer, @"Flatten Visible", BSActionLayerFlattenVisible, @"");
 
         NSMenu *frame = AddMenu(main, @"Frame");
-        AddAction(frame, @"Frame Properties…", BSActionFrameProperties, @"");
+        [frame setAutoenablesItems:NO];
+        NSMenuItem *frameProperties = AddAction(frame, @"Frame Properties…", BSActionFrameProperties, @"p");
+        [frameProperties setKeyEquivalentModifierMask:0];
         AddAction(frame, @"Cel Properties…", BSActionCelProperties, @"");
         [frame addItem:[NSMenuItem separatorItem]];
-        AddAction(frame, @"New Frame", BSActionFrameNew, @"");
-        AddAction(frame, @"New Empty Frame", BSActionFrameNewEmpty, @"");
-        AddAction(frame, @"Duplicate Cels", BSActionFrameDuplicate, @"");
-        AddAction(frame, @"Duplicate Linked Cels", BSActionFrameDuplicateLinked, @"");
-        AddAction(frame, @"Delete Frame", BSActionFrameDelete, @"");
+        NSMenuItem *newFrame = AddAction(frame, @"New Frame", BSActionFrameNew, @"n");
+        [newFrame setKeyEquivalentModifierMask:NSEventModifierFlagOption];
+        NSMenuItem *newEmptyFrame = AddAction(frame, @"New Empty Frame", BSActionFrameNewEmpty, @"b");
+        [newEmptyFrame setKeyEquivalentModifierMask:NSEventModifierFlagOption];
+        NSMenuItem *duplicateCels = AddAction(frame, @"Duplicate Cel(s)", BSActionFrameDuplicate, @"d");
+        [duplicateCels setKeyEquivalentModifierMask:NSEventModifierFlagOption];
+        NSMenuItem *duplicateLinkedCels = AddAction(frame, @"Duplicate Linked Cel(s)", BSActionFrameDuplicateLinked, @"m");
+        [duplicateLinkedCels setKeyEquivalentModifierMask:NSEventModifierFlagOption];
+        NSMenuItem *deleteFrame = AddAction(frame, @"Delete Frame", BSActionFrameDelete, @"c");
+        [deleteFrame setKeyEquivalentModifierMask:NSEventModifierFlagOption];
+        [deleteFrame setEnabled:NO];
         [frame addItem:[NSMenuItem separatorItem]];
-        AddAction(frame, @"Play Animation", BSActionAnimationPlay, @"");
+
+        NSMenu *playback = AddMenu(frame, @"Playback");
+        NSMenuItem *playAnimation = AddAction(playback, @"Play Animation", BSActionAnimationPlay, @"\r");
+        [playAnimation setKeyEquivalentModifierMask:0];
+        NSMenuItem *playPreviewAnimation = AddAction(playback, @"Play Preview Animation", BSActionAnimationPlayPreview, @"\r");
+        [playPreviewAnimation setKeyEquivalentModifierMask:NSEventModifierFlagShift];
+        [playback addItem:[NSMenuItem separatorItem]];
+        AddAction(playback, @"Playback Speed 0.25x", BSActionPlaybackSpeed025, @"");
+        AddAction(playback, @"Playback Speed 0.5x", BSActionPlaybackSpeed05, @"");
+        NSMenuItem *playbackSpeed1 = AddAction(playback, @"Playback Speed 1x", BSActionPlaybackSpeed1, @"");
+        [playbackSpeed1 setState:NSControlStateValueOn];
+        AddAction(playback, @"Playback Speed 1.5x", BSActionPlaybackSpeed15, @"");
+        AddAction(playback, @"Playback Speed 2x", BSActionPlaybackSpeed2, @"");
+        AddAction(playback, @"Playback Speed 3x", BSActionPlaybackSpeed3, @"");
+        [playback addItem:[NSMenuItem separatorItem]];
+        AddAction(playback, @"Play Once", BSActionPlaybackPlayOnce, @"");
+        AddAction(playback, @"Play All Frames (Ignore Tags)", BSActionPlaybackPlayAllFrames, @"");
+        NSMenuItem *playSubtags = AddAction(playback, @"Play Subtags & Repetitions", BSActionPlaybackPlaySubtagsRepetitions, @"");
+        [playSubtags setState:NSControlStateValueOn];
+        [playback addItem:[NSMenuItem separatorItem]];
+        AddAction(playback, @"Rewind on Stop", BSActionPlaybackRewindOnStop, @"");
+
         NSMenu *tags = AddMenu(frame, @"Tags");
+        AddAction(tags, @"Tag Properties…", BSActionFrameTagProperties, @"");
+        [tags addItem:[NSMenuItem separatorItem]];
         AddAction(tags, @"New Tag", BSActionFrameTagNew, @"");
         AddAction(tags, @"Delete Tag", BSActionFrameTagDelete, @"");
-        NSMenu *jump = AddMenu(frame, @"Jump To");
-        AddAction(jump, @"First Frame", BSActionFrameFirst, @"");
+
+        NSMenu *jump = AddMenu(frame, @"Jump to");
+        NSString *homeKey = [NSString stringWithFormat:@"%C", (unichar)NSHomeFunctionKey];
+        NSMenuItem *firstFrame = AddAction(jump, @"First Frame", BSActionFrameFirst, homeKey);
+        [firstFrame setKeyEquivalentModifierMask:0];
         AddAction(jump, @"Previous Frame", BSActionFramePrevious, @"");
         AddAction(jump, @"Next Frame", BSActionFrameNext, @"");
-        AddAction(jump, @"Last Frame", BSActionFrameLast, @"");
+        NSString *endKey = [NSString stringWithFormat:@"%C", (unichar)NSEndFunctionKey];
+        NSMenuItem *lastFrame = AddAction(jump, @"Last Frame", BSActionFrameLast, endKey);
+        [lastFrame setKeyEquivalentModifierMask:0];
+        [jump addItem:[NSMenuItem separatorItem]];
+        AddAction(jump, @"First Frame In Tag", BSActionFrameFirstInTag, @"");
+        AddAction(jump, @"Last Frame In Tag", BSActionFrameLastInTag, @"");
+        [jump addItem:[NSMenuItem separatorItem]];
+        NSMenuItem *goToFrame = AddAction(jump, @"Go to Frame", BSActionFrameGoTo, @"g");
+        [goToFrame setKeyEquivalentModifierMask:NSEventModifierFlagOption];
+
         [frame addItem:[NSMenuItem separatorItem]];
-        AddAction(frame, @"Reverse Frames", BSActionFrameReverse, @"");
+        AddAction(frame, @"Constant Frame Rate", BSActionFrameConstantRate, @"");
+        NSMenuItem *reverseFrames = AddAction(frame, @"Reverse Frames", BSActionFrameReverse, @"i");
+        [reverseFrames setKeyEquivalentModifierMask:NSEventModifierFlagOption];
+        [reverseFrames setEnabled:NO];
 
         NSMenu *select = AddMenu(main, @"Select");
         AddAction(select, @"All", BSActionSelectAll, @"a");
