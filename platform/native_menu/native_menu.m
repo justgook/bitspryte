@@ -16,10 +16,14 @@ typedef NS_ENUM(NSInteger, BSAction) {
     BSActionImportSpriteSheet,
     BSActionUndo,
     BSActionRedo,
+    BSActionUndoHistory,
     BSActionCut,
     BSActionCopy,
     BSActionCopyMerged,
     BSActionPaste,
+    BSActionPasteAsNewSprite,
+    BSActionPasteAsNewLayer,
+    BSActionPasteAsNewReferenceLayer,
     BSActionClear,
     BSActionFill,
     BSActionStroke,
@@ -28,6 +32,23 @@ typedef NS_ENUM(NSInteger, BSAction) {
     BSActionRotate90CCW,
     BSActionFlipHorizontal,
     BSActionFlipVertical,
+    BSActionTransform,
+    BSActionShiftLeft,
+    BSActionShiftRight,
+    BSActionShiftUp,
+    BSActionShiftDown,
+    BSActionNewBrush,
+    BSActionNewSpriteFromSelection,
+    BSActionReplaceColor,
+    BSActionInvert,
+    BSActionAdjustBrightnessContrast,
+    BSActionAdjustHueSaturation,
+    BSActionAdjustColorCurve,
+    BSActionFXOutline,
+    BSActionFXConvolutionMatrix,
+    BSActionFXDespeckle,
+    BSActionInsertText,
+    BSActionKeyboardShortcuts,
     BSActionPreferences,
     BSActionSpriteProperties,
     BSActionColorModeRGB,
@@ -46,10 +67,12 @@ typedef NS_ENUM(NSInteger, BSAction) {
     BSActionLayerProperties,
     BSActionLayerVisible,
     BSActionLayerLock,
+    BSActionLayerOpenGroup,
     BSActionLayerNew,
     BSActionLayerNewGroup,
     BSActionLayerNewViaCopy,
     BSActionLayerNewViaCut,
+    BSActionLayerNewReferenceFromFile,
     BSActionLayerNewTilemap,
     BSActionLayerDelete,
     BSActionLayerDuplicate,
@@ -116,6 +139,13 @@ static NSInteger pendingAction = BSActionNone;
 {
     pendingAction = [sender tag];
     switch (pendingAction) {
+        case BSActionLayerVisible:
+        case BSActionLayerLock:
+        case BSActionLayerOpenGroup: {
+            NSMenuItem *item = (NSMenuItem *)sender;
+            [item setState:[item state] == NSControlStateValueOn ? NSControlStateValueOff : NSControlStateValueOn];
+            break;
+        }
         case BSActionWindowMinimize:
             [[NSApp keyWindow] performMiniaturize:sender];
             break;
@@ -182,6 +212,7 @@ void bs_native_menu_install(void)
         NSMenu *file = AddMenu(main, @"File");
         AddAction(file, @"New…", BSActionNewFile, @"n");
         AddAction(file, @"Open…", BSActionOpenFile, @"o");
+        AddMenu(file, @"Open Recent");
         [file addItem:[NSMenuItem separatorItem]];
         AddAction(file, @"Save", BSActionSaveFile, @"s");
         NSMenuItem *saveAs = AddAction(file, @"Save As…", BSActionSaveFileAs, @"s");
@@ -202,26 +233,65 @@ void bs_native_menu_install(void)
 
         NSMenu *edit = AddMenu(main, @"Edit");
         AddAction(edit, @"Undo", BSActionUndo, @"z");
-        NSMenuItem *redo = AddAction(edit, @"Redo", BSActionRedo, @"z");
-        [redo setKeyEquivalentModifierMask:NSEventModifierFlagCommand | NSEventModifierFlagShift];
+        AddAction(edit, @"Redo", BSActionRedo, @"y");
+        AddAction(edit, @"Undo History", BSActionUndoHistory, @"");
         [edit addItem:[NSMenuItem separatorItem]];
         AddAction(edit, @"Cut", BSActionCut, @"x");
         AddAction(edit, @"Copy", BSActionCopy, @"c");
         NSMenuItem *copyMerged = AddAction(edit, @"Copy Merged", BSActionCopyMerged, @"c");
         [copyMerged setKeyEquivalentModifierMask:NSEventModifierFlagCommand | NSEventModifierFlagShift];
         AddAction(edit, @"Paste", BSActionPaste, @"v");
-        AddAction(edit, @"Clear", BSActionClear, @"");
+        NSMenu *pasteSpecial = AddMenu(edit, @"Paste Special");
+        AddAction(pasteSpecial, @"Paste as New Sprite", BSActionPasteAsNewSprite, @"");
+        NSMenuItem *pasteAsNewLayer = AddAction(pasteSpecial, @"Paste as New Layer", BSActionPasteAsNewLayer, @"v");
+        [pasteAsNewLayer setKeyEquivalentModifierMask:NSEventModifierFlagCommand | NSEventModifierFlagShift];
+        AddAction(pasteSpecial, @"Paste as New Reference Layer", BSActionPasteAsNewReferenceLayer, @"");
+        NSMenuItem *deleteItem = AddAction(edit, @"Delete", BSActionClear, @"\x7f");
+        [deleteItem setKeyEquivalentModifierMask:0];
         [edit addItem:[NSMenuItem separatorItem]];
-        AddAction(edit, @"Fill", BSActionFill, @"");
-        AddAction(edit, @"Stroke", BSActionStroke, @"");
+        NSMenuItem *fill = AddAction(edit, @"Fill", BSActionFill, @"f");
+        [fill setKeyEquivalentModifierMask:0];
+        NSMenuItem *stroke = AddAction(edit, @"Stroke", BSActionStroke, @"s");
+        [stroke setKeyEquivalentModifierMask:0];
         [edit addItem:[NSMenuItem separatorItem]];
         NSMenu *rotate = AddMenu(edit, @"Rotate");
         AddAction(rotate, @"180°", BSActionRotate180, @"");
         AddAction(rotate, @"90° CW", BSActionRotate90CW, @"");
         AddAction(rotate, @"90° CCW", BSActionRotate90CCW, @"");
-        AddAction(edit, @"Flip Horizontal", BSActionFlipHorizontal, @"");
-        AddAction(edit, @"Flip Vertical", BSActionFlipVertical, @"");
+        NSMenuItem *flipHorizontal = AddAction(edit, @"Flip Horizontal", BSActionFlipHorizontal, @"h");
+        [flipHorizontal setKeyEquivalentModifierMask:NSEventModifierFlagShift];
+        NSMenuItem *flipVertical = AddAction(edit, @"Flip Vertical", BSActionFlipVertical, @"v");
+        [flipVertical setKeyEquivalentModifierMask:NSEventModifierFlagShift];
+        AddAction(edit, @"Transform", BSActionTransform, @"t");
+        NSMenu *shift = AddMenu(edit, @"Shift");
+        AddAction(shift, @"Left", BSActionShiftLeft, @"");
+        AddAction(shift, @"Right", BSActionShiftRight, @"");
+        AddAction(shift, @"Up", BSActionShiftUp, @"");
+        AddAction(shift, @"Down", BSActionShiftDown, @"");
         [edit addItem:[NSMenuItem separatorItem]];
+        AddAction(edit, @"New Brush", BSActionNewBrush, @"b");
+        NSMenuItem *newSpriteFromSelection = AddAction(edit, @"New Sprite From Selection", BSActionNewSpriteFromSelection, @"n");
+        [newSpriteFromSelection setKeyEquivalentModifierMask:NSEventModifierFlagCommand | NSEventModifierFlagOption];
+        [edit addItem:[NSMenuItem separatorItem]];
+        NSMenuItem *replaceColor = AddAction(edit, @"Replace Color…", BSActionReplaceColor, @"r");
+        [replaceColor setKeyEquivalentModifierMask:NSEventModifierFlagShift];
+        AddAction(edit, @"Invert…", BSActionInvert, @"");
+        NSMenu *adjustments = AddMenu(edit, @"Adjustments");
+        AddAction(adjustments, @"Brightness/Contrast…", BSActionAdjustBrightnessContrast, @"");
+        AddAction(adjustments, @"Hue/Saturation…", BSActionAdjustHueSaturation, @"u");
+        NSMenuItem *colorCurve = AddAction(adjustments, @"Color Curve…", BSActionAdjustColorCurve, @"m");
+        [colorCurve setKeyEquivalentModifierMask:NSEventModifierFlagControl];
+        NSMenu *fx = AddMenu(edit, @"FX");
+        NSMenuItem *outline = AddAction(fx, @"Outline", BSActionFXOutline, @"o");
+        [outline setKeyEquivalentModifierMask:NSEventModifierFlagShift];
+        NSString *f9Key = [NSString stringWithFormat:@"%C", (unichar)NSF9FunctionKey];
+        NSMenuItem *convolutionMatrix = AddAction(fx, @"Convolution Matrix…", BSActionFXConvolutionMatrix, f9Key);
+        [convolutionMatrix setKeyEquivalentModifierMask:0];
+        AddAction(fx, @"Despeckle (Median Filter)…", BSActionFXDespeckle, @"");
+        AddAction(edit, @"Insert Text", BSActionInsertText, @"");
+        [edit addItem:[NSMenuItem separatorItem]];
+        NSMenuItem *keyboardShortcuts = AddAction(edit, @"Keyboard Shortcuts…", BSActionKeyboardShortcuts, @"k");
+        [keyboardShortcuts setKeyEquivalentModifierMask:NSEventModifierFlagCommand | NSEventModifierFlagOption | NSEventModifierFlagShift];
         AddAction(edit, @"Preferences…", BSActionPreferences, @",");
 
         NSMenu *sprite = AddMenu(main, @"Sprite");
@@ -246,22 +316,35 @@ void bs_native_menu_install(void)
         AddAction(sprite, @"Trim", BSActionTrimSprite, @"");
 
         NSMenu *layer = AddMenu(main, @"Layer");
-        AddAction(layer, @"Properties…", BSActionLayerProperties, @"");
-        AddAction(layer, @"Visible", BSActionLayerVisible, @"");
-        AddAction(layer, @"Lock", BSActionLayerLock, @"");
+        NSMenuItem *layerProperties = AddAction(layer, @"Properties…", BSActionLayerProperties, @"p");
+        [layerProperties setKeyEquivalentModifierMask:NSEventModifierFlagCommand | NSEventModifierFlagShift];
+        NSMenuItem *layerVisible = AddAction(layer, @"Visible", BSActionLayerVisible, @"x");
+        [layerVisible setKeyEquivalentModifierMask:NSEventModifierFlagCommand | NSEventModifierFlagShift];
+        [layerVisible setState:NSControlStateValueOn];
+        NSMenuItem *lockLayers = AddAction(layer, @"Lock Layers", BSActionLayerLock, @"");
+        [lockLayers setState:NSControlStateValueOn];
+        NSMenuItem *openGroup = AddAction(layer, @"Open Group", BSActionLayerOpenGroup, @"e");
+        [openGroup setKeyEquivalentModifierMask:NSEventModifierFlagCommand | NSEventModifierFlagShift];
+        [openGroup setState:NSControlStateValueOn];
         [layer addItem:[NSMenuItem separatorItem]];
-        NSMenu *newLayer = AddMenu(layer, @"New");
-        AddAction(newLayer, @"New Layer", BSActionLayerNew, @"");
-        AddAction(newLayer, @"New Group", BSActionLayerNewGroup, @"");
+        NSMenu *newLayer = AddMenu(layer, @"New…");
+        NSMenuItem *newLayerItem = AddAction(newLayer, @"New Layer", BSActionLayerNew, @"n");
+        [newLayerItem setKeyEquivalentModifierMask:NSEventModifierFlagCommand | NSEventModifierFlagShift];
+        NSMenuItem *newGroup = AddAction(newLayer, @"New Group", BSActionLayerNewGroup, @"n");
+        [newGroup setKeyEquivalentModifierMask:NSEventModifierFlagCommand | NSEventModifierFlagOption | NSEventModifierFlagShift];
         [newLayer addItem:[NSMenuItem separatorItem]];
-        AddAction(newLayer, @"Layer via Copy", BSActionLayerNewViaCopy, @"");
-        AddAction(newLayer, @"Layer via Cut", BSActionLayerNewViaCut, @"");
+        AddAction(newLayer, @"New Layer via Copy", BSActionLayerNewViaCopy, @"j");
+        NSMenuItem *newLayerViaCut = AddAction(newLayer, @"New Layer via Cut", BSActionLayerNewViaCut, @"j");
+        [newLayerViaCut setKeyEquivalentModifierMask:NSEventModifierFlagCommand | NSEventModifierFlagShift];
         [newLayer addItem:[NSMenuItem separatorItem]];
+        AddAction(newLayer, @"New Reference Layer from File", BSActionLayerNewReferenceFromFile, @"");
         AddAction(newLayer, @"New Tilemap Layer", BSActionLayerNewTilemap, @"");
         AddAction(layer, @"Delete Layer", BSActionLayerDelete, @"");
+        AddMenu(layer, @"Convert To…");
         [layer addItem:[NSMenuItem separatorItem]];
         AddAction(layer, @"Duplicate", BSActionLayerDuplicate, @"");
-        AddAction(layer, @"Merge Down", BSActionLayerMergeDown, @"");
+        NSMenuItem *mergeDown = AddAction(layer, @"Merge Down", BSActionLayerMergeDown, @"");
+        [mergeDown setEnabled:NO];
         AddAction(layer, @"Flatten", BSActionLayerFlatten, @"");
         AddAction(layer, @"Flatten Visible", BSActionLayerFlattenVisible, @"");
 
