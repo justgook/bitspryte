@@ -54,6 +54,7 @@ typedef NS_ENUM(NSInteger, BSAction) {
     BSActionColorModeRGB,
     BSActionColorModeGrayscale,
     BSActionColorModeIndexed,
+    BSActionColorModeMoreOptions,
     BSActionDuplicateSprite,
     BSActionSpriteSize,
     BSActionCanvasSize,
@@ -139,6 +140,19 @@ static NSInteger pendingAction = BSActionNone;
 {
     pendingAction = [sender tag];
     switch (pendingAction) {
+        case BSActionColorModeRGB:
+        case BSActionColorModeGrayscale:
+        case BSActionColorModeIndexed: {
+            NSMenuItem *selectedItem = (NSMenuItem *)sender;
+            for (NSMenuItem *item in [[selectedItem menu] itemArray]) {
+                NSInteger tag = [item tag];
+                if (tag == BSActionColorModeRGB || tag == BSActionColorModeGrayscale || tag == BSActionColorModeIndexed) {
+                    [item setState:NSControlStateValueOff];
+                }
+            }
+            [selectedItem setState:NSControlStateValueOn];
+            break;
+        }
         case BSActionLayerVisible:
         case BSActionLayerLock:
         case BSActionLayerOpenGroup: {
@@ -295,16 +309,22 @@ void bs_native_menu_install(void)
         AddAction(edit, @"Preferences…", BSActionPreferences, @",");
 
         NSMenu *sprite = AddMenu(main, @"Sprite");
-        AddAction(sprite, @"Properties…", BSActionSpriteProperties, @"");
+        [sprite setAutoenablesItems:NO];
+        AddAction(sprite, @"Properties…", BSActionSpriteProperties, @"p");
         NSMenu *colorMode = AddMenu(sprite, @"Color Mode");
-        AddAction(colorMode, @"RGB Color", BSActionColorModeRGB, @"");
+        NSMenuItem *rgbColor = AddAction(colorMode, @"RGB Color", BSActionColorModeRGB, @"");
+        [rgbColor setState:NSControlStateValueOn];
         AddAction(colorMode, @"Grayscale", BSActionColorModeGrayscale, @"");
         AddAction(colorMode, @"Indexed", BSActionColorModeIndexed, @"");
+        [colorMode addItem:[NSMenuItem separatorItem]];
+        AddAction(colorMode, @"More Options", BSActionColorModeMoreOptions, @"");
         [sprite addItem:[NSMenuItem separatorItem]];
-        AddAction(sprite, @"Duplicate", BSActionDuplicateSprite, @"");
+        AddAction(sprite, @"Duplicate…", BSActionDuplicateSprite, @"");
         [sprite addItem:[NSMenuItem separatorItem]];
-        AddAction(sprite, @"Sprite Size…", BSActionSpriteSize, @"");
-        AddAction(sprite, @"Canvas Size…", BSActionCanvasSize, @"");
+        NSMenuItem *spriteSize = AddAction(sprite, @"Sprite Size…", BSActionSpriteSize, @"i");
+        [spriteSize setKeyEquivalentModifierMask:NSEventModifierFlagCommand | NSEventModifierFlagOption];
+        NSMenuItem *canvasSize = AddAction(sprite, @"Canvas Size…", BSActionCanvasSize, @"c");
+        [canvasSize setKeyEquivalentModifierMask:0];
         NSMenu *rotateCanvas = AddMenu(sprite, @"Rotate Canvas");
         AddAction(rotateCanvas, @"180°", BSActionRotateCanvas180, @"");
         AddAction(rotateCanvas, @"90° CW", BSActionRotateCanvas90CW, @"");
@@ -312,7 +332,8 @@ void bs_native_menu_install(void)
         AddAction(rotateCanvas, @"Flip Horizontal", BSActionFlipCanvasHorizontal, @"");
         AddAction(rotateCanvas, @"Flip Vertical", BSActionFlipCanvasVertical, @"");
         [sprite addItem:[NSMenuItem separatorItem]];
-        AddAction(sprite, @"Crop", BSActionCropSprite, @"");
+        NSMenuItem *crop = AddAction(sprite, @"Crop", BSActionCropSprite, @"");
+        [crop setEnabled:NO];
         AddAction(sprite, @"Trim", BSActionTrimSprite, @"");
 
         NSMenu *layer = AddMenu(main, @"Layer");

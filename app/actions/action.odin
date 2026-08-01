@@ -60,6 +60,7 @@ Kind :: enum i32 {
 	Color_Mode_RGB,
 	Color_Mode_Grayscale,
 	Color_Mode_Indexed,
+	Color_Mode_More_Options,
 	Duplicate_Sprite,
 	Sprite_Size,
 	Canvas_Size,
