@@ -29,10 +29,10 @@ test_publish_notifies_matching_and_any_subscribers :: proc(t: ^testing.T) {
 	defer events.destroy(&bus)
 	matching, unrelated, all: Counter
 
-	events.subscribe(&bus, .Clear_Canvas_Requested, count_event, &matching)
-	events.subscribe(&bus, .Export_PNG_Requested, count_event, &unrelated)
+	events.subscribe(&bus, .Canvas_Changed, count_event, &matching)
+	events.subscribe(&bus, .Canvas_Cleared, count_event, &unrelated)
 	events.subscribe(&bus, .Any, count_event, &all)
-	event := events.make(.Clear_Canvas_Requested, .Native_Menu)
+	event := events.make(.Canvas_Changed, .Native_Menu)
 	events.publish(&bus, event)
 
 	testing.expect(t, matching.count == 1)
@@ -64,9 +64,9 @@ test_subscriber_can_publish_a_followup_fact :: proc(t: ^testing.T) {
 	}
 	facts: Counter
 
-	events.subscribe(&bus, .Clear_Canvas_Requested, publish_cleared, &publisher)
+	events.subscribe(&bus, .Canvas_Changed, publish_cleared, &publisher)
 	events.subscribe(&bus, .Canvas_Cleared, count_event, &facts)
-	events.publish(&bus, events.make(.Clear_Canvas_Requested, .Native_Menu))
+	events.publish(&bus, events.make(.Canvas_Changed, .Native_Menu))
 
 	testing.expect(t, facts.count == 1)
 	testing.expect(t, facts.last.kind == .Canvas_Cleared)

@@ -1,5 +1,6 @@
 package main
 
+import actions "./app/actions"
 import events "./app/events"
 import drawing "./drawing"
 import checkerboard "./editor/checkerboard"
@@ -34,6 +35,7 @@ cursor_point: drawing.Point
 cursor_inside: bool
 shift_held: bool
 checkerboard_config: checkerboard.Config
+action_bus: actions.Bus
 event_bus: events.Bus
 
 canvas_viewport :: proc() -> Viewport {
@@ -49,22 +51,18 @@ canvas_viewport :: proc() -> Viewport {
 	return {x = (window_width - width) * 0.5, y = (window_height - height) * 0.5, width = width, height = height}
 }
 
-clear_canvas_requested :: proc(event: events.Event, _: rawptr) {
+clear_canvas_requested :: proc(action: actions.Action, _: rawptr) {
 	checkerboard.fill(&canvas, checkerboard_config)
 	overlay.clear(&preview_overlay)
 	drawing.reset_stroke(&paint_stroke)
 	drawing.cancel_line_preview(&line_preview)
-	events.publish(&event_bus, events.make(.Canvas_Cleared, event.source))
+	events.publish(&event_bus, events.make(.Canvas_Cleared, action.source))
 }
 
 dispatch_native_menu :: proc() {
-	#partial switch native_menu.take_action() {
-	case .Settings:
-		events.publish(&event_bus, events.make(.Open_Settings_Requested, .Native_Menu))
-	case .Export_PNG:
-		events.publish(&event_bus, events.make(.Export_PNG_Requested, .Native_Menu))
-	case .Clear_Canvas:
-		events.publish(&event_bus, events.make(.Clear_Canvas_Requested, .Native_Menu))
+	kind := native_menu.take_action()
+	if kind != .None {
+		actions.publish(&action_bus, actions.make(kind, .Native_Menu))
 	}
 }
 
@@ -80,7 +78,7 @@ init :: proc "c" () {
 
 	checkerboard_config = checkerboard.default_config()
 	checkerboard.fill(&canvas, checkerboard_config)
-	events.subscribe(&event_bus, .Clear_Canvas_Requested, clear_canvas_requested)
+	actions.subscribe(&action_bus, .Clear, clear_canvas_requested)
 	native_menu.install()
 }
 
@@ -109,6 +107,7 @@ frame :: proc "c" () {
 cleanup :: proc "c" () {
 	context = runtime.default_context()
 
+	actions.destroy(&action_bus)
 	events.destroy(&event_bus)
 	compositor.shutdown(&texture_compositor)
 	overlay.deinit(&preview_overlay)

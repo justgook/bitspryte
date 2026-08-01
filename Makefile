@@ -83,6 +83,7 @@ check: $(SOKOL_LIBS) $(NATIVE_DEPS) | $(BUILD_DIR)
 
 test: $(SOKOL_LIBS) | $(BUILD_DIR)
 	$(Q)mkdir -p "$(BUILD_DIR)/tests"
+	$(Q)$(ODIN_ENV) $(ODIN) test tests/actions -debug -out:"$(BUILD_DIR)/tests/actions"
 	$(Q)$(ODIN_ENV) $(ODIN) test tests/drawing -debug -out:"$(BUILD_DIR)/tests/drawing"
 	$(Q)$(ODIN_ENV) $(ODIN) test tests/checkerboard -debug -out:"$(BUILD_DIR)/tests/checkerboard"
 	$(Q)$(ODIN_ENV) $(ODIN) test tests/events -debug -out:"$(BUILD_DIR)/tests/events"

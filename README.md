@@ -28,11 +28,11 @@ The first build downloads the Odin Sokol bindings and compiles the native Sokol 
 
 ## Events and native menu
 
-`app/events` is a synchronous publish/subscribe bus. Subsystems subscribe to one event kind or `.Any`, receive events without knowing their input source, and can publish follow-up facts from handlers. Subscriptions can be removed explicitly.
+`app/actions` and `app/events` are synchronous publish/subscribe buses. Actions describe requested work; events describe completed facts. Both support filtered and catch-all subscriptions, explicit unsubscription, source metadata, and nested publication.
 
-Requests and completed facts are separate. For example, the macOS Edit menu publishes `Clear_Canvas_Requested`; the canvas subscriber performs the work and publishes `Canvas_Cleared`. Pointer edits publish `Canvas_Changed` through the same bus.
+Native menu selections publish an `actions.Action` with `.Native_Menu` source. For example, Edit → Clear publishes `.Clear`; the canvas subscriber performs the work and then publishes the `.Canvas_Cleared` event. Pointer edits publish `.Canvas_Changed` facts.
 
-On macOS, `platform/native_menu` installs native BitSpryte, File, Edit, and Window menus. Settings, PNG export, and canvas-clear menu commands enter the application exclusively through the event bus. The bridge is a small Objective-C static library; non-macOS builds use a no-op implementation.
+On macOS, `platform/native_menu` installs native File, Edit, Sprite, Layer, Frame, Select, View, Window, and Help menus with nested Export, Import, transform, layer, frame, selection, and view commands. Every custom item maps to the canonical `actions.Kind` enum. The bridge uses one generic Objective-C target with action tags; non-macOS builds use a no-op implementation.
 
 ## CPU framebuffer package
 
