@@ -316,6 +316,7 @@ void bs_native_menu_install(void)
         AddAction(sprite, @"Trim", BSActionTrimSprite, @"");
 
         NSMenu *layer = AddMenu(main, @"Layer");
+        [layer setAutoenablesItems:NO];
         NSMenuItem *layerProperties = AddAction(layer, @"Properties…", BSActionLayerProperties, @"p");
         [layerProperties setKeyEquivalentModifierMask:NSEventModifierFlagCommand | NSEventModifierFlagShift];
         NSMenuItem *layerVisible = AddAction(layer, @"Visible", BSActionLayerVisible, @"x");
