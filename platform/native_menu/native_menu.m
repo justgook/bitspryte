@@ -487,19 +487,23 @@ void bs_native_menu_install(void)
         [reverseFrames setEnabled:NO];
 
         NSMenu *select = AddMenu(main, @"Select");
+        [select setAutoenablesItems:NO];
         AddAction(select, @"All", BSActionSelectAll, @"a");
         AddAction(select, @"Deselect", BSActionSelectDeselect, @"d");
-        AddAction(select, @"Reselect", BSActionSelectReselect, @"");
-        AddAction(select, @"Inverse", BSActionSelectInverse, @"");
+        NSMenuItem *reselect = AddAction(select, @"Reselect", BSActionSelectReselect, @"d");
+        [reselect setKeyEquivalentModifierMask:NSEventModifierFlagCommand | NSEventModifierFlagShift];
+        [reselect setEnabled:NO];
+        NSMenuItem *inverse = AddAction(select, @"Inverse", BSActionSelectInverse, @"i");
+        [inverse setKeyEquivalentModifierMask:NSEventModifierFlagCommand | NSEventModifierFlagShift];
         [select addItem:[NSMenuItem separatorItem]];
-        AddAction(select, @"Color Range…", BSActionSelectColorRange, @"");
+        AddAction(select, @"Color Range", BSActionSelectColorRange, @"");
         NSMenu *modify = AddMenu(select, @"Modify");
-        AddAction(modify, @"Border…", BSActionSelectModifyBorder, @"");
-        AddAction(modify, @"Expand…", BSActionSelectModifyExpand, @"");
-        AddAction(modify, @"Contract…", BSActionSelectModifyContract, @"");
+        AddAction(modify, @"Border", BSActionSelectModifyBorder, @"");
+        AddAction(modify, @"Expand", BSActionSelectModifyExpand, @"");
+        AddAction(modify, @"Contract", BSActionSelectModifyContract, @"");
         [select addItem:[NSMenuItem separatorItem]];
-        AddAction(select, @"Load from File…", BSActionSelectLoad, @"");
-        AddAction(select, @"Save to File…", BSActionSelectSave, @"");
+        AddAction(select, @"Load from MSK file", BSActionSelectLoad, @"");
+        AddAction(select, @"Save to MSK file", BSActionSelectSave, @"");
 
         NSMenu *view = AddMenu(main, @"View");
         AddAction(view, @"Duplicate View", BSActionViewDuplicate, @"");
