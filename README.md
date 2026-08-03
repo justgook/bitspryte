@@ -6,6 +6,8 @@ The starter opens a resizable native window and presents a CPU-backed 160×120 p
 
 Press **Shift** to preview a straight line from the previous stroke endpoint to the cursor. Click to commit that segment; while Shift remains held, a new preview immediately starts from the clicked endpoint, allowing chained lines. Releasing Shift removes the preview. **Escape** cancels an active preview; otherwise it quits.
 
+The canvas opens centered at **100%** instead of fitting the window. Scroll vertically or horizontally to pan; pinch, or use **Control/Command + scroll**, to move through pixel-perfect zoom levels from 6.25% to 6400%. View → Home restores 100% and recenters the canvas.
+
 ## Requirements
 
 - A recent [Odin](https://odin-lang.org/) compiler

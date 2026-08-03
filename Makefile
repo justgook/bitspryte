@@ -80,6 +80,7 @@ test: $(SOKOL_LIBS) | $(BUILD_DIR)
 	$(Q)$(ODIN_ENV) $(ODIN) test tests/actions -debug -out:"$(BUILD_DIR)/tests/actions"
 	$(Q)$(ODIN_ENV) $(ODIN) test tests/drawing -debug -out:"$(BUILD_DIR)/tests/drawing"
 	$(Q)$(ODIN_ENV) $(ODIN) test tests/checkerboard -debug -out:"$(BUILD_DIR)/tests/checkerboard"
+	$(Q)$(ODIN_ENV) $(ODIN) test tests/canvas_view -debug -out:"$(BUILD_DIR)/tests/canvas_view"
 	$(Q)$(ODIN_ENV) $(ODIN) test tests/events -debug -out:"$(BUILD_DIR)/tests/events"
 
 deps: $(SOKOL_LIBS)
