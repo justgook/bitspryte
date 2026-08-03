@@ -32,7 +32,7 @@ The first build downloads the Odin Sokol bindings and compiles the native Sokol 
 
 Native menu selections publish an `actions.Action` with `.Native_Menu` source. For example, Edit → Delete publishes `.Clear`; the canvas subscriber performs the work and then publishes the `.Canvas_Cleared` event. Pointer edits publish `.Canvas_Changed` facts.
 
-On macOS, `platform/native_menu` installs native File, Edit, Sprite, Layer, Frame, Select, View, Window, and Help menus with nested Export, Import, transform, layer, frame, selection, and view commands. Every custom item maps to the canonical `actions.Kind` enum. The bridge uses one generic Objective-C target with action tags; non-macOS builds use a no-op implementation.
+On macOS, `platform/native_menu` installs native File, Edit, Sprite, Layer, Frame, Select, View, Window, and Help menus with nested Export, Import, transform, layer, frame, selection, and view commands. Every custom item maps to the canonical `actions.Kind` enum. The menu uses Odin's native AppKit interop and an Odin-registered `NSObject` target with action tags; non-macOS builds use a no-op implementation.
 
 ## CPU framebuffer package
 
