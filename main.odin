@@ -84,8 +84,14 @@ init :: proc "c" () {
 
 	sg.setup({environment = sglue.environment(), logger = {func = slog.func}})
 	cpu_framebuffer.setup()
-	assert(cpu_framebuffer.init(&canvas, CANVAS_WIDTH, CANVAS_HEIGHT), "failed to create canvas framebuffer")
-	assert(overlay.init(&preview_overlay, CANVAS_WIDTH, CANVAS_HEIGHT), "failed to create preview overlay")
+	canvas_initialized := cpu_framebuffer.init(&canvas, CANVAS_WIDTH, CANVAS_HEIGHT)
+	if !canvas_initialized {
+		panic("failed to create canvas framebuffer")
+	}
+	preview_initialized := overlay.init(&preview_overlay, CANVAS_WIDTH, CANVAS_HEIGHT)
+	if !preview_initialized {
+		panic("failed to create preview overlay")
+	}
 	compositor.setup(&texture_compositor)
 	overlay.clear(&preview_overlay)
 

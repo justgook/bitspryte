@@ -52,7 +52,7 @@ endif
 
 ifeq ($(PROFILE),release)
   CFLAGS_PROFILE := -O2 -DNDEBUG
-  ODIN_FLAGS := -o:speed
+  ODIN_FLAGS := -o:speed -disable-assert
 else
   CFLAGS_PROFILE := -g
   ODIN_FLAGS := -debug
