@@ -6,7 +6,13 @@ The starter opens a resizable native window and presents a CPU-backed 160×120 p
 
 Press **Shift** to preview a straight line from the previous stroke endpoint to the cursor. Click to commit that segment; while Shift remains held, a new preview immediately starts from the clicked endpoint, allowing chained lines. Releasing Shift removes the preview. **Escape** cancels an active preview; otherwise it quits.
 
-The canvas opens centered at **100%** instead of fitting the window. Scroll vertically or horizontally to pan; pinch, or use **Control/Command + scroll**, to move through pixel-perfect zoom levels from 6.25% to 6400%. View → Home restores 100% and recenters the canvas.
+The canvas opens centered at **100%** inside the editor's canvas region instead of fitting the window. Scroll vertically or horizontally to pan; pinch, or use **Control/Command + scroll**, to move through pixel-perfect zoom levels from 6.25% to 6400%. View → Home or the SMGUI Home button restores 100% and recenters the canvas inside that region.
+
+## SMGUI layout
+
+The editor shell is rendered by a vendored, backend-independent SMGUI Odin package. An SMGUI Custom Form reserves a transparent canvas region; BitSpryte keeps ownership of the Sokol application loop and draws the document canvas into that region before alpha-compositing SMGUI on top. This ordering allows future menus and popups to cover the canvas correctly.
+
+The vendored source and its pinned upstream revision are documented in `vendor/smgui/VENDOR.md`. BitSpryte intentionally does not vendor SMGUI's platform adapters or duplicate Sokol dependency.
 
 ## Requirements
 

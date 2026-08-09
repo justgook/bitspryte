@@ -5,11 +5,15 @@ import events "./app/events"
 import drawing "./drawing"
 import canvas_view "./editor/canvas_view"
 import checkerboard "./editor/checkerboard"
+import editor_layout "./editor/layout"
 import overlay "./editor/overlay"
 import canvas_gesture "./platform/canvas_gesture"
 import native_menu "./platform/native_menu"
+import smgui_host "./platform/smgui_host"
 import compositor "./render/compositor"
 import cpu_framebuffer "./render/cpu_framebuffer"
+import psf2 "./vendor/smgui/psf2"
+import smgui "./vendor/smgui/smgui"
 import runtime "base:runtime"
 import "core:math"
 import sapp "sokol/app"
@@ -47,13 +51,43 @@ action_bus: actions.Bus
 event_bus: events.Bus
 view: canvas_view.View
 touch_pinch: Touch_Pinch
+gui_context: smgui.Context
+gui_host: smgui_host.State
+gui_layout: editor_layout.Layout
+gui_font: psf2.Font
 
-sync_view_size :: proc() {
-	width := sapp.widthf()
-	height := sapp.heightf()
-	if width != view.window_width || height != view.window_height {
-		canvas_view.resize(&view, width, height)
+sync_layout_size :: proc() {
+	width := int(sapp.width())
+	height := int(sapp.height())
+	if width < 1 || height < 1 {return}
+	if width != gui_context.screen.width || height != gui_context.screen.height {
+		if error := smgui_host.resize(&gui_host, width, height); error != .None {
+			panic("failed to resize SMGUI")
+		}
+		editor_layout.resize(&gui_layout, width, height)
+		_ = smgui.refresh(&gui_context)
 	}
+}
+
+sync_canvas_region :: proc() {
+	region := editor_layout.canvas_region(&gui_layout)
+	if region.width < 1 || region.height < 1 {return}
+	if f32(region.x) != view.region_x ||
+	   f32(region.y) != view.region_y ||
+	   f32(region.width) != view.region_width ||
+	   f32(region.height) != view.region_height {
+		canvas_view.set_region(&view, f32(region.x), f32(region.y), f32(region.width), f32(region.height))
+	}
+}
+
+point_in_canvas_region :: proc(x, y: f32) -> bool {
+	region := editor_layout.canvas_region(&gui_layout)
+	return(
+		x >= f32(region.x) &&
+		y >= f32(region.y) &&
+		x < f32(region.x + region.width) &&
+		y < f32(region.y + region.height) \
+	)
 }
 
 canvas_viewport :: proc() -> canvas_view.Viewport {
@@ -97,6 +131,25 @@ init :: proc "c" () {
 
 	checkerboard_config = checkerboard.default_config()
 	checkerboard.fill(&canvas, checkerboard_config)
+
+	window_width, window_height := int(sapp.width()), int(sapp.height())
+	editor_layout.init(&gui_layout, window_width, window_height)
+	if error := smgui.init(
+		&gui_context,
+		smgui_host.create(&gui_host),
+		editor_layout.TEXTS[:],
+		window_width,
+		window_height,
+	); error != .None {
+		panic("failed to initialize SMGUI")
+	}
+	font, font_error := psf2.default_font()
+	if font_error != .None {panic("failed to load SMGUI font")}
+	gui_font = font
+	if error := psf2.configure(&gui_context, &gui_font); error != .None {
+		panic("failed to configure SMGUI font")
+	}
+
 	canvas_view.init(&view, CANVAS_WIDTH, CANVAS_HEIGHT, sapp.widthf(), sapp.heightf())
 	actions.subscribe(&action_bus, .Clear, clear_canvas_requested)
 	actions.subscribe(&action_bus, .View_Home, actual_size_requested)
@@ -108,9 +161,26 @@ frame :: proc "c" () {
 	context = runtime.default_context()
 
 	dispatch_native_menu()
-	sync_view_size()
+	sync_layout_size()
+	_, gui_state, gui_error := smgui.poll_event(&gui_context, editor_layout.forms(&gui_layout))
+	if gui_error != .None || gui_state == .Closed {
+		sapp.request_quit()
+		return
+	}
+	sync_canvas_region()
+	if gui_layout.home_requested {
+		gui_layout.home_requested = false
+		actions.publish(&action_bus, actions.make(.View_Home, .User_Interface))
+		_ = smgui.refresh(&gui_context)
+	}
+	if gui_layout.clear_requested {
+		gui_layout.clear_requested = false
+		actions.publish(&action_bus, actions.make(.Clear, .User_Interface))
+		_ = smgui.refresh(&gui_context)
+	}
+
 	gesture := canvas_gesture.take()
-	if gesture.steps != 0 {
+	if gesture.steps != 0 && point_in_canvas_region(gesture.x, gesture.y) {
 		direction := 1 if gesture.steps > 0 else -1
 		for _ in 0 ..< abs(gesture.steps) {
 			canvas_view.zoom_at(&view, direction, gesture.x, gesture.y)
@@ -118,6 +188,7 @@ frame :: proc "c" () {
 	}
 	cpu_framebuffer.upload_if_dirty(&canvas)
 	overlay.upload_if_dirty(&preview_overlay)
+	smgui_host.prepare(&gui_host)
 
 	pass := sg.Pass {
 		action = {colors = {0 = {load_action = .CLEAR, clear_value = {0.055, 0.071, 0.102, 1.0}}}},
@@ -126,11 +197,18 @@ frame :: proc "c" () {
 
 	sg.begin_pass(pass)
 	viewport := canvas_viewport()
+	region := editor_layout.canvas_region(&gui_layout)
 	sg.apply_viewportf(viewport.x, viewport.y, viewport.width, viewport.height, true)
-	sg.apply_scissor_rectf(0, 0, sapp.widthf(), sapp.heightf(), true)
+	sg.apply_scissor_rect(region.x, region.y, region.width, region.height, true)
 	cpu_framebuffer.render(&canvas)
 	preview_view, preview_sampler := overlay.texture(&preview_overlay)
 	compositor.draw(&texture_compositor, preview_view, preview_sampler, 0.75)
+
+	// SMGUI is the top layer so controls, menus, and popups can cover the canvas.
+	sg.apply_viewport(0, 0, int(sapp.width()), int(sapp.height()), true)
+	sg.apply_scissor_rect(0, 0, int(sapp.width()), int(sapp.height()), true)
+	gui_view, gui_sampler := smgui_host.texture(&gui_host)
+	compositor.draw(&texture_compositor, gui_view, gui_sampler)
 	sg.end_pass()
 	sg.commit()
 }
@@ -140,6 +218,7 @@ cleanup :: proc "c" () {
 
 	actions.destroy(&action_bus)
 	events.destroy(&event_bus)
+	_ = smgui.deinit(&gui_context)
 	compositor.shutdown(&texture_compositor)
 	overlay.deinit(&preview_overlay)
 	cpu_framebuffer.deinit(&canvas)
@@ -214,6 +293,13 @@ update_touch_pinch :: proc(event: ^sapp.Event) {
 event :: proc "c" (event: ^sapp.Event) {
 	context = runtime.default_context()
 
+	if gui_host.initialized {
+		if error := smgui_host.push_sokol_event(&gui_host, event); error != .None {
+			sapp.request_quit()
+			return
+		}
+	}
+
 	if event.type == .KEY_DOWN && event.key_code == .ESCAPE {
 		if drawing.line_preview_active(&line_preview) {
 			shift_held = false
@@ -226,6 +312,9 @@ event :: proc "c" (event: ^sapp.Event) {
 
 	#partial switch event.type {
 	case .MOUSE_SCROLL:
+		if !point_in_canvas_region(event.mouse_x, event.mouse_y) {
+			return
+		}
 		if event.modifiers & (sapp.MODIFIER_CTRL | sapp.MODIFIER_SUPER) != 0 {
 			if event.scroll_y != 0 {
 				canvas_view.zoom_at(&view, 1 if event.scroll_y > 0 else -1, event.mouse_x, event.mouse_y)
@@ -235,7 +324,13 @@ event :: proc "c" (event: ^sapp.Event) {
 		}
 
 	case .TOUCHES_BEGAN, .TOUCHES_MOVED:
-		update_touch_pinch(event)
+		if event.num_touches >= 2 {
+			mid_x := (event.touches[0].pos_x + event.touches[1].pos_x) * 0.5
+			mid_y := (event.touches[0].pos_y + event.touches[1].pos_y) * 0.5
+			if point_in_canvas_region(mid_x, mid_y) {
+				update_touch_pinch(event)
+			}
+		}
 
 	case .TOUCHES_ENDED, .TOUCHES_CANCELLED:
 		touch_pinch.active = false

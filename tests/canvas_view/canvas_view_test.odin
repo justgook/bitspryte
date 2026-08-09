@@ -69,3 +69,33 @@ test_resize_preserves_canvas_point_at_window_center :: proc(t: ^testing.T) {
 
 	testing.expect(t, before_x == after_x && before_y == after_y)
 }
+
+@(test)
+test_offset_region_centers_and_translates_canvas_coordinates :: proc(t: ^testing.T) {
+	view: canvas_view.View
+	canvas_view.init(&view, 160, 120, 800, 600)
+	canvas_view.set_region(&view, 40, 32, 720, 544)
+	canvas_view.actual_size(&view)
+	viewport := canvas_view.viewport(&view)
+
+	testing.expect(t, viewport == canvas_view.Viewport{320, 244, 160, 120})
+	x, y, inside := canvas_view.screen_to_canvas(&view, 330, 254)
+	testing.expect(t, inside && x == 10 && y == 10)
+	_, _, outside := canvas_view.screen_to_canvas(&view, 39, 31)
+	testing.expect(t, !outside)
+}
+
+@(test)
+test_zoom_anchor_accounts_for_region_origin :: proc(t: ^testing.T) {
+	view: canvas_view.View
+	canvas_view.init(&view, 160, 120, 800, 600)
+	canvas_view.set_region(&view, 100, 50, 600, 500)
+	canvas_view.actual_size(&view)
+	before_x, before_y, before_inside := canvas_view.screen_to_canvas(&view, 390, 290)
+
+	canvas_view.zoom_at(&view, 1, 390, 290)
+	after_x, after_y, after_inside := canvas_view.screen_to_canvas(&view, 390, 290)
+
+	testing.expect(t, before_inside && after_inside)
+	testing.expect(t, before_x == after_x && before_y == after_y)
+}

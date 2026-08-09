@@ -6,12 +6,74 @@ import "core:math"
 // image, and above 100% every scale is an integer pixel multiple.
 @(rodata)
 ZOOM_LEVELS := [?]f32 {
-	0.0625, 0.125, 0.25, 0.5,
+	0.0625,
+	0.125,
+	0.25,
+	0.5,
 	1,
-	2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-	17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
-	33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
-	49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64,
+	2,
+	3,
+	4,
+	5,
+	6,
+	7,
+	8,
+	9,
+	10,
+	11,
+	12,
+	13,
+	14,
+	15,
+	16,
+	17,
+	18,
+	19,
+	20,
+	21,
+	22,
+	23,
+	24,
+	25,
+	26,
+	27,
+	28,
+	29,
+	30,
+	31,
+	32,
+	33,
+	34,
+	35,
+	36,
+	37,
+	38,
+	39,
+	40,
+	41,
+	42,
+	43,
+	44,
+	45,
+	46,
+	47,
+	48,
+	49,
+	50,
+	51,
+	52,
+	53,
+	54,
+	55,
+	56,
+	57,
+	58,
+	59,
+	60,
+	61,
+	62,
+	63,
+	64,
 }
 ACTUAL_SIZE_INDEX :: 4
 MIN_VISIBLE_PIXELS :: f32(50)
@@ -23,10 +85,11 @@ Viewport :: struct {
 
 View :: struct {
 	canvas_width, canvas_height: f32,
-	window_width, window_height: f32,
-	x, y:                         f32,
-	zoom_index:                   int,
-	initialized:                  bool,
+	region_x, region_y:          f32,
+	region_width, region_height: f32,
+	x, y:                        f32,
+	zoom_index:                  int,
+	initialized:                 bool,
 }
 
 init :: proc(view: ^View, canvas_width, canvas_height: int, window_width, window_height: f32) {
@@ -35,8 +98,8 @@ init :: proc(view: ^View, canvas_width, canvas_height: int, window_width, window
 	view^ = {
 		canvas_width  = f32(canvas_width),
 		canvas_height = f32(canvas_height),
-		window_width  = window_width,
-		window_height = window_height,
+		region_width  = window_width,
+		region_height = window_height,
 		zoom_index    = ACTUAL_SIZE_INDEX,
 		initialized   = true,
 	}
@@ -52,9 +115,9 @@ viewport :: proc(view: ^View) -> Viewport {
 	assert(view != nil && view.initialized)
 	current_scale := scale(view)
 	return {
-		x      = math.round(view.x),
-		y      = math.round(view.y),
-		width  = view.canvas_width * current_scale,
+		x = math.round(view.region_x + view.x),
+		y = math.round(view.region_y + view.y),
+		width = view.canvas_width * current_scale,
 		height = view.canvas_height * current_scale,
 	}
 }
@@ -62,8 +125,8 @@ viewport :: proc(view: ^View) -> Viewport {
 center :: proc(view: ^View) {
 	assert(view != nil && view.initialized)
 	current_scale := scale(view)
-	view.x = math.round((view.window_width - view.canvas_width * current_scale) * 0.5)
-	view.y = math.round((view.window_height - view.canvas_height * current_scale) * 0.5)
+	view.x = math.round((view.region_width - view.canvas_width * current_scale) * 0.5)
+	view.y = math.round((view.region_height - view.canvas_height * current_scale) * 0.5)
 }
 
 actual_size :: proc(view: ^View) {
@@ -72,14 +135,22 @@ actual_size :: proc(view: ^View) {
 	center(view)
 }
 
-resize :: proc(view: ^View, window_width, window_height: f32) {
+set_region :: proc(view: ^View, x, y, width, height: f32) {
 	assert(view != nil && view.initialized)
-	// Keep the same canvas point under the center of the resized window.
-	view.x += (window_width - view.window_width) * 0.5
-	view.y += (window_height - view.window_height) * 0.5
-	view.window_width = window_width
-	view.window_height = window_height
+	assert(width > 0 && height > 0)
+	// Keep the same canvas point under the center of the resized region. Moving
+	// an unchanged region carries the canvas with it.
+	view.x += (width - view.region_width) * 0.5
+	view.y += (height - view.region_height) * 0.5
+	view.region_x = x
+	view.region_y = y
+	view.region_width = width
+	view.region_height = height
 	constrain(view)
+}
+
+resize :: proc(view: ^View, window_width, window_height: f32) {
+	set_region(view, 0, 0, window_width, window_height)
 }
 
 constrain :: proc(view: ^View) {
@@ -87,8 +158,8 @@ constrain :: proc(view: ^View) {
 	bounds := viewport(view)
 	visible_x := min(MIN_VISIBLE_PIXELS, bounds.width)
 	visible_y := min(MIN_VISIBLE_PIXELS, bounds.height)
-	view.x = clamp(view.x, visible_x - bounds.width, view.window_width - visible_x)
-	view.y = clamp(view.y, visible_y - bounds.height, view.window_height - visible_y)
+	view.x = clamp(view.x, visible_x - bounds.width, view.region_width - visible_x)
+	view.y = clamp(view.y, visible_y - bounds.height, view.region_height - visible_y)
 }
 
 pan :: proc(view: ^View, delta_x, delta_y: f32) {
@@ -115,8 +186,8 @@ zoom_at :: proc(view: ^View, direction: int, screen_x, screen_y: f32) -> bool {
 	new_scale := scale(view)
 	world_x := (screen_x - old_bounds.x) / old_scale
 	world_y := (screen_y - old_bounds.y) / old_scale
-	view.x = screen_x - world_x * new_scale
-	view.y = screen_y - world_y * new_scale
+	view.x = screen_x - view.region_x - world_x * new_scale
+	view.y = screen_y - view.region_y - world_y * new_scale
 	constrain(view)
 	return true
 }
