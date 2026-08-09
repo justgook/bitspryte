@@ -12,6 +12,8 @@ The canvas opens centered at **100%** inside the editor's canvas region instead 
 
 The editor shell is rendered by a vendored, backend-independent SMGUI Odin package. An SMGUI Custom Form reserves a transparent canvas region; BitSpryte keeps ownership of the Sokol application loop and draws the document canvas into that region before alpha-compositing SMGUI on top. This ordering allows future menus and popups to cover the canvas correctly.
 
+The shell uses SMGUI's Aseprite sprite-sheet font at 2× scale and the generated Catppuccin Mocha Aseprite theme bundle. The theme's software cursor is disabled because BitSpryte uses one native cursor across both the UI shell and GPU-rendered canvas.
+
 The vendored source and its pinned upstream revision are documented in `vendor/smgui/VENDOR.md`. BitSpryte intentionally does not vendor SMGUI's platform adapters or duplicate Sokol dependency.
 
 ## Requirements

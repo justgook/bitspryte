@@ -12,8 +12,9 @@ import native_menu "./platform/native_menu"
 import smgui_host "./platform/smgui_host"
 import compositor "./render/compositor"
 import cpu_framebuffer "./render/cpu_framebuffer"
-import psf2 "./vendor/smgui/psf2"
 import smgui "./vendor/smgui/smgui"
+import spritesheet "./vendor/smgui/spritesheet"
+import mocha "./vendor/smgui/themes/catppuccin_mocha"
 import runtime "base:runtime"
 import "core:math"
 import sapp "sokol/app"
@@ -26,6 +27,7 @@ WINDOW_HEIGHT :: 720
 WINDOW_TITLE :: "BitSpryte"
 CANVAS_WIDTH :: 160
 CANVAS_HEIGHT :: 120
+UI_GRAPHICS_SCALE :: 2
 
 SCROLL_PAN_PIXELS :: f32(32)
 PINCH_SCALE_THRESHOLD :: f32(1.1)
@@ -54,7 +56,10 @@ touch_pinch: Touch_Pinch
 gui_context: smgui.Context
 gui_host: smgui_host.State
 gui_layout: editor_layout.Layout
-gui_font: psf2.Font
+gui_font: spritesheet.Font
+gui_style_atlas: mocha.Style_Atlas
+gui_panel_style: smgui.Panel_Style
+footer_status_buffer: [64]u8
 
 sync_layout_size :: proc() {
 	width := int(sapp.width())
@@ -88,6 +93,24 @@ point_in_canvas_region :: proc(x, y: f32) -> bool {
 		x < f32(region.x + region.width) &&
 		y < f32(region.y + region.height) \
 	)
+}
+
+update_layout_cursor :: proc(x, y: f32) {
+	on_splitter := editor_layout.point_on_left_sidebar_splitter(
+		&gui_layout,
+		int(x),
+		int(y),
+		int(sapp.width()),
+		int(sapp.height()),
+	)
+	on_panel_splitter := editor_layout.point_on_left_panel_splitter(&gui_layout, int(x), int(y))
+	if gui_layout.resizing_left_sidebar || on_splitter {
+		sapp.set_mouse_cursor(.RESIZE_EW)
+	} else if gui_layout.resizing_left_panels || on_panel_splitter {
+		sapp.set_mouse_cursor(.RESIZE_NS)
+	} else {
+		sapp.set_mouse_cursor(.DEFAULT)
+	}
 }
 
 canvas_viewport :: proc() -> canvas_view.Viewport {
@@ -133,7 +156,25 @@ init :: proc "c" () {
 	checkerboard.fill(&canvas, checkerboard_config)
 
 	window_width, window_height := int(sapp.width()), int(sapp.height())
-	editor_layout.init(&gui_layout, window_width, window_height)
+	style_atlas, style_error := mocha.load_style_atlas(UI_GRAPHICS_SCALE)
+	if style_error != .None {panic("failed to load Catppuccin panel styles")}
+	gui_style_atlas = style_atlas
+	// Highlighted normal/focused pair selected from the generated style atlas.
+	panel_style, panel_style_found := mocha.style_pair(&gui_style_atlas, "editor_normal", "editor_selected")
+	if !panel_style_found {panic("Catppuccin Panel style is missing")}
+	gui_panel_style = panel_style
+	update_footer_status(false)
+	editor_layout.init(
+		&gui_layout,
+		window_width,
+		window_height,
+		{
+			canvas_style = &gui_panel_style,
+			palette_style = &gui_panel_style,
+			color_wheel_style = &gui_panel_style,
+			padding = {left = 2, top = 2, right = 2, bottom = 2},
+		},
+	)
 	if error := smgui.init(
 		&gui_context,
 		smgui_host.create(&gui_host),
@@ -143,11 +184,19 @@ init :: proc "c" () {
 	); error != .None {
 		panic("failed to initialize SMGUI")
 	}
-	font, font_error := psf2.default_font()
-	if font_error != .None {panic("failed to load SMGUI font")}
+	if error := mocha.apply(&gui_context, UI_GRAPHICS_SCALE); error != .None {
+		panic("failed to apply Catppuccin Mocha SMGUI theme")
+	}
+	// The theme includes an Aseprite cursor sprite. Keep the native cursor so it
+	// remains consistent over both the SMGUI shell and GPU-rendered canvas.
+	if error := smgui.use_hardware_cursor(&gui_context); error != .None {
+		panic("failed to restore the native cursor")
+	}
+	font, font_error := spritesheet.aseprite_font(2)
+	if font_error != .None {panic("failed to load Aseprite SMGUI font")}
 	gui_font = font
-	if error := psf2.configure(&gui_context, &gui_font); error != .None {
-		panic("failed to configure SMGUI font")
+	if error := spritesheet.configure(&gui_context, &gui_font); error != .None {
+		panic("failed to configure Aseprite SMGUI font")
 	}
 
 	canvas_view.init(&view, CANVAS_WIDTH, CANVAS_HEIGHT, sapp.widthf(), sapp.heightf())
@@ -191,7 +240,9 @@ frame :: proc "c" () {
 	smgui_host.prepare(&gui_host)
 
 	pass := sg.Pass {
-		action = {colors = {0 = {load_action = .CLEAR, clear_value = {0.055, 0.071, 0.102, 1.0}}}},
+		action = {
+			colors = {0 = {load_action = .CLEAR, clear_value = {30.0 / 255.0, 30.0 / 255.0, 45.0 / 255.0, 1.0}}},
+		},
 		swapchain = sglue.swapchain(),
 	}
 
@@ -219,6 +270,8 @@ cleanup :: proc "c" () {
 	actions.destroy(&action_bus)
 	events.destroy(&event_bus)
 	_ = smgui.deinit(&gui_context)
+	spritesheet.deinit(&gui_font)
+	mocha.style_atlas_deinit(&gui_style_atlas)
 	compositor.shutdown(&texture_compositor)
 	overlay.deinit(&preview_overlay)
 	cpu_framebuffer.deinit(&canvas)
@@ -229,6 +282,20 @@ cleanup :: proc "c" () {
 screen_to_canvas :: proc(x, y: f32) -> (drawing.Point, bool) {
 	canvas_x, canvas_y, inside := canvas_view.screen_to_canvas(&view, x, y)
 	return {canvas_x, canvas_y}, inside
+}
+
+update_footer_status :: proc(refresh: bool = true) {
+	editor_layout.TEXTS[4] = editor_layout.canvas_status_text(
+		footer_status_buffer[:],
+		cursor_point.x,
+		cursor_point.y,
+		cursor_inside,
+		CANVAS_WIDTH,
+		CANVAS_HEIGHT,
+	)
+	if refresh && gui_context.screen.pixels != nil {
+		_ = smgui.refresh(&gui_context)
+	}
 }
 
 plot_canvas_pixel :: proc(point: drawing.Point, _: rawptr) {
@@ -257,7 +324,12 @@ start_line_preview_at_cursor :: proc() {
 }
 
 update_cursor :: proc(x, y: f32) {
-	cursor_point, cursor_inside = screen_to_canvas(x, y)
+	next_point, next_inside := screen_to_canvas(x, y)
+	changed := next_inside != cursor_inside || (next_inside && next_point != cursor_point)
+	cursor_point, cursor_inside = next_point, next_inside
+	if changed {
+		update_footer_status()
+	}
 }
 
 update_touch_pinch :: proc(event: ^sapp.Event) {
@@ -311,6 +383,11 @@ event :: proc "c" (event: ^sapp.Event) {
 	}
 
 	#partial switch event.type {
+	case .MOUSE_LEAVE:
+		if !gui_layout.resizing_left_sidebar && !gui_layout.resizing_left_panels {
+			sapp.set_mouse_cursor(.DEFAULT)
+		}
+
 	case .MOUSE_SCROLL:
 		if !point_in_canvas_region(event.mouse_x, event.mouse_y) {
 			return
@@ -349,6 +426,22 @@ event :: proc "c" (event: ^sapp.Event) {
 		}
 
 	case .MOUSE_DOWN:
+		if event.mouse_button == .LEFT &&
+		   editor_layout.begin_left_sidebar_resize(
+			   &gui_layout,
+			   int(event.mouse_x),
+			   int(event.mouse_y),
+			   int(sapp.width()),
+			   int(sapp.height()),
+		   ) {
+			sapp.set_mouse_cursor(.RESIZE_EW)
+			return
+		}
+		if event.mouse_button == .LEFT &&
+		   editor_layout.begin_left_panel_resize(&gui_layout, int(event.mouse_x), int(event.mouse_y)) {
+			sapp.set_mouse_cursor(.RESIZE_NS)
+			return
+		}
 		if event.mouse_button != .LEFT && event.mouse_button != .RIGHT {
 			return
 		}
@@ -384,6 +477,19 @@ event :: proc "c" (event: ^sapp.Event) {
 		}
 
 	case .MOUSE_MOVE:
+		if gui_layout.resizing_left_sidebar {
+			editor_layout.drag_left_sidebar(&gui_layout, int(event.mouse_x), int(sapp.width()), int(sapp.height()))
+			_ = smgui.refresh(&gui_context)
+			sapp.set_mouse_cursor(.RESIZE_EW)
+			return
+		}
+		if gui_layout.resizing_left_panels {
+			editor_layout.drag_left_panels(&gui_layout, int(event.mouse_y), int(sapp.width()), int(sapp.height()))
+			_ = smgui.refresh(&gui_context)
+			sapp.set_mouse_cursor(.RESIZE_NS)
+			return
+		}
+		update_layout_cursor(event.mouse_x, event.mouse_y)
 		update_cursor(event.mouse_x, event.mouse_y)
 		if !cursor_inside {
 			if drawing.line_preview_active(&line_preview) {
@@ -403,6 +509,16 @@ event :: proc "c" (event: ^sapp.Event) {
 		}
 
 	case .MOUSE_UP:
+		if gui_layout.resizing_left_sidebar && event.mouse_button == .LEFT {
+			editor_layout.end_left_sidebar_resize(&gui_layout)
+			update_layout_cursor(event.mouse_x, event.mouse_y)
+			return
+		}
+		if gui_layout.resizing_left_panels && event.mouse_button == .LEFT {
+			editor_layout.end_left_panel_resize(&gui_layout)
+			update_layout_cursor(event.mouse_x, event.mouse_y)
+			return
+		}
 		if !shift_held && (event.mouse_button == .LEFT || event.mouse_button == .RIGHT) {
 			if drawing.is_active(&paint_stroke) {
 				drawing.end_stroke(&paint_stroke)

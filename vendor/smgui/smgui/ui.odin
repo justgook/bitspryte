@@ -165,6 +165,7 @@ Field_Kind :: enum u8 {
 	Popup,
 	Menu,
 	Division,
+	Panel,
 	Label,
 	Multiline_Label,
 	Status,
@@ -233,6 +234,7 @@ Form_Flag :: enum {
 	Resizable,
 	Selected,
 	Disabled,
+	Focused,
 }
 
 Form_Flags :: bit_set[Form_Flag;u16]
@@ -311,6 +313,23 @@ Image :: struct {
 	height: int,
 	pitch:  int,
 	pixels: []u8,
+}
+
+// Nine_Slice images are indexed row first, then column.
+Nine_Slice :: [3][3]Image
+
+Panel_Style :: struct {
+	normal:  Nine_Slice,
+	focused: Nine_Slice,
+}
+
+Panel_Padding :: struct {
+	left, top, right, bottom: int,
+}
+
+Panel_Content :: enum {
+	Styled,
+	Transparent,
 }
 
 Key_Input :: struct {
@@ -500,6 +519,10 @@ Form :: struct {
 	selected_option:      int,
 	points:               []i16,
 	children:             []Form,
+	panel_style:          ^Panel_Style,
+	panel_padding:        Panel_Padding,
+	panel_content:        Panel_Content,
+	panel_background:     u32,
 }
 
 Backend_Init_Proc :: #type proc(
@@ -540,72 +563,72 @@ THEME_COLOR_COUNT :: int(Theme_Color.Count)
 SKIN_IMAGE_COUNT :: int(Skin_Image.Count)
 
 Context :: struct {
-	screen:         Image,
-	skin:           [SKIN_IMAGE_COUNT]Image,
-	backend:        Backend,
-	skin_buffer:    []u8,
-	software_cursor: Image,
-	theme:          [THEME_COLOR_COUNT]u32,
-	texts:          []string,
-	font:           rawptr,
-	font_bounds:    Font_Bounds_Proc,
-	font_draw:      Font_Draw_Proc,
-	form:           []Form,
-	menu:           ^Form,
-	menu_anchor:    ^Form,
-	hovered:        ^Form,
-	dragged:        ^Form,
-	resized:        ^Form,
-	pressed:        ^Form,
-	pressed_part:   i8,
-	vertical_bar:   ^Form,
-	horizontal_bar: ^Form,
-	scrollbar_width: int,
+	screen:           Image,
+	skin:             [SKIN_IMAGE_COUNT]Image,
+	backend:          Backend,
+	skin_buffer:      []u8,
+	software_cursor:  Image,
+	theme:            [THEME_COLOR_COUNT]u32,
+	texts:            []string,
+	font:             rawptr,
+	font_bounds:      Font_Bounds_Proc,
+	font_draw:        Font_Draw_Proc,
+	form:             []Form,
+	menu:             ^Form,
+	menu_anchor:      ^Form,
+	hovered:          ^Form,
+	dragged:          ^Form,
+	resized:          ^Form,
+	pressed:          ^Form,
+	pressed_part:     i8,
+	vertical_bar:     ^Form,
+	horizontal_bar:   ^Form,
+	scrollbar_width:  int,
 	scrollbar_height: int,
-	scrollbar_grab: int,
-	scrollbar_start: int,
-	scrollbar_end: int,
-	scrollbar_range: int,
-	text_field:     ^Form,
-	text_cursor:    int,
-	text_scroll:    int,
-	edit_buffer:    Text_Buffer,
-	popup:          ^Form,
-	popup_x:        int,
-	popup_y:        int,
-	popup_width:    int,
-	popup_height:   int,
-	color:          u32,
-	color_history:  [16]u32,
-	color_hue:      int,
+	scrollbar_grab:   int,
+	scrollbar_start:  int,
+	scrollbar_end:    int,
+	scrollbar_range:  int,
+	text_field:       ^Form,
+	text_cursor:      int,
+	text_scroll:      int,
+	edit_buffer:      Text_Buffer,
+	popup:            ^Form,
+	popup_x:          int,
+	popup_y:          int,
+	popup_width:      int,
+	popup_height:     int,
+	color:            u32,
+	color_history:    [16]u32,
+	color_hue:        int,
 	color_saturation: int,
-	color_value:    int,
-	color_mode:     int,
-	color_edit:     [8]u8,
-	color_cursor:   int,
-	curve_x:        int,
-	curve_y:        int,
-	drag_x:         int,
-	drag_y:         int,
-	default_size:   int,
-	default_top:    int,
-	popups:         [MAX_POPUPS]^Form,
-	popup_count:    int,
-	events:         [MAX_EVENTS]Event,
-	event_head:     int,
-	event_tail:     int,
+	color_value:      int,
+	color_mode:       int,
+	color_edit:       [8]u8,
+	color_cursor:     int,
+	curve_x:          int,
+	curve_y:          int,
+	drag_x:           int,
+	drag_y:           int,
+	default_size:     int,
+	default_top:      int,
+	popups:           [MAX_POPUPS]^Form,
+	popup_count:      int,
+	events:           [MAX_EVENTS]Event,
+	event_head:       int,
+	event_tail:       int,
 	flags:            Context_Flags,
 	screen_revision:  u64,
 	rendered_mouse_x: int,
 	rendered_mouse_y: int,
-	mouse_x:        int,
-	mouse_y:        int,
-	last_mouse_x:   int,
-	last_mouse_y:   int,
-	clip_x0:        int,
-	clip_y0:        int,
-	clip_x1:        int,
-	clip_y1:        int,
+	mouse_x:          int,
+	mouse_y:          int,
+	last_mouse_x:     int,
+	last_mouse_y:     int,
+	clip_x0:          int,
+	clip_y0:          int,
+	clip_x1:          int,
+	clip_y1:          int,
 }
 
 DEFAULT_THEME := [THEME_COLOR_COUNT]u32 {
@@ -784,24 +807,67 @@ set_skin :: proc(ctx: ^Context, skin: []Image) -> Error {
 	return refresh(ctx)
 }
 
+@(require_results)
+scale_rgba_nearest :: proc(
+	pixels: []u8,
+	width, height: int,
+	scale: int = 1,
+) -> (
+	[]u8,
+	int,
+	int,
+	Error,
+) {
+	if width < 1 ||
+	   height < 1 ||
+	   scale < 1 ||
+	   width > max(int) / height / 4 ||
+	   len(pixels) < width * height * 4 ||
+	   width > max(int) / scale ||
+	   height > max(int) / scale {
+		return nil, 0, 0, .Invalid_Input
+	}
+	scaled_width := width * scale
+	scaled_height := height * scale
+	if scaled_width > max(int) / scaled_height / 4 {
+		return nil, 0, 0, .Invalid_Input
+	}
+	owned := make([]u8, scaled_width * scaled_height * 4) or_else nil
+	if owned == nil {
+		return nil, 0, 0, .Out_Of_Memory
+	}
+	for destination_y in 0 ..< scaled_height {
+		source_y := destination_y / scale
+		for destination_x in 0 ..< scaled_width {
+			source_x := destination_x / scale
+			source := (source_y * width + source_x) * 4
+			destination := (destination_y * scaled_width + destination_x) * 4
+			copy(owned[destination:destination + 4], pixels[source:source + 4])
+		}
+	}
+	return owned, scaled_width, scaled_height, .None
+}
+
 @(require_results, tag = "reference:ui_pngskin")
-set_png_skin :: proc(ctx: ^Context, png: []u8) -> Error {
-	if ctx == nil || len(png) < 16 {
+set_png_skin :: proc(ctx: ^Context, png: []u8, scale: int = 1) -> Error {
+	if ctx == nil || len(png) < 16 || scale < 1 {
 		return .Invalid_Input
 	}
 	width, height, channels: c.int
 	decoded := stbi.load_from_memory(raw_data(png), c.int(len(png)), &width, &height, &channels, 4)
-	if decoded == nil || width < 1 || height < 1 {
+	if decoded == nil || width < 1 || height < 1 || int(width) > max(int) / int(height) / 4 {
 		return .Invalid_Input
 	}
 	defer stbi.image_free(decoded)
-	pixel_count := int(width) * int(height) * 4
-	owned := make([]u8, pixel_count) or_else nil
-	if owned == nil {
-		return .Out_Of_Memory
-	}
-	for index in 0 ..< pixel_count {
-		owned[index] = decoded[index]
+	source_count := int(width) * int(height) * 4
+	owned, atlas_width, _, scale_error := scale_rgba_nearest(
+		decoded[:source_count],
+		int(width),
+		int(height),
+		scale,
+	)
+	if scale_error != .None {
+		return scale_error
 	}
 	comment, comment_owned, found := png_skin_comment(png)
 	if !found {
@@ -814,8 +880,6 @@ set_png_skin :: proc(ctx: ^Context, png: []u8) -> Error {
 
 	skin: [SKIN_IMAGE_COUNT]Image
 	position := 0
-	atlas_width := int(width)
-	atlas_height := int(height)
 	skin_index := 0
 	for skin_index < SKIN_IMAGE_COUNT {
 		x, ok_x := parse_skin_number(comment, &position)
@@ -825,17 +889,31 @@ set_png_skin :: proc(ctx: ^Context, png: []u8) -> Error {
 		if !ok_x || !ok_y || !ok_width || !ok_height {
 			break
 		}
-		for position < len(comment) && comment[position] != '\n' && comment[position] != ')' &&
-		    comment[position] != ']' && comment[position] != '}' && comment[position] != '>' {
+		for position < len(comment) &&
+		    comment[position] != '\n' &&
+		    comment[position] != ')' &&
+		    comment[position] != ']' &&
+		    comment[position] != '}' &&
+		    comment[position] != '>' {
 			position += 1
 		}
-		if image_width > 0 && image_height > 0 && x >= 0 && y >= 0 &&
-		   x + image_width <= atlas_width && y + image_height <= atlas_height {
+		if image_width > 0 &&
+		   image_height > 0 &&
+		   x >= 0 &&
+		   y >= 0 &&
+		   image_width <= int(width) &&
+		   image_height <= int(height) &&
+		   x <= int(width) - image_width &&
+		   y <= int(height) - image_height {
+			x *= scale
+			y *= scale
+			image_width *= scale
+			image_height *= scale
 			offset := (y * atlas_width + x) * 4
 			skin[skin_index] = {
-				width = image_width,
+				width  = image_width,
 				height = image_height,
-				pitch = atlas_width * 4,
+				pitch  = atlas_width * 4,
 				pixels = owned[offset:],
 			}
 			skin_index += 1
@@ -858,8 +936,11 @@ png_u32_be :: proc(bytes: []u8, offset: int) -> (u32, bool) {
 	if offset < 0 || offset + 4 > len(bytes) {
 		return 0, false
 	}
-	return u32(bytes[offset]) << 24 | u32(bytes[offset + 1]) << 16 |
-	       u32(bytes[offset + 2]) << 8 | u32(bytes[offset + 3]), true
+	return u32(bytes[offset]) << 24 |
+		u32(bytes[offset + 1]) << 16 |
+		u32(bytes[offset + 2]) << 8 |
+		u32(bytes[offset + 3]),
+		true
 }
 
 @(private = "file")
@@ -881,7 +962,10 @@ png_skin_comment :: proc(png: []u8) -> (comment: []u8, owned: []u8, found: bool)
 		if chunk_type == "tEXt" && len(data) >= 8 && string(data[:8]) == "Comment\x00" {
 			return data[8:], nil, true
 		}
-		if chunk_type == "zTXt" && len(data) >= 9 && string(data[:8]) == "Comment\x00" && data[8] == 0 {
+		if chunk_type == "zTXt" &&
+		   len(data) >= 9 &&
+		   string(data[:8]) == "Comment\x00" &&
+		   data[8] == 0 {
 			buffer: bytes.Buffer
 			if error := zlib.inflate(data[9:], &buffer); error != nil {
 				bytes.buffer_destroy(&buffer)
@@ -1264,9 +1348,15 @@ layout_forms :: proc(
 			return 0, 0, measure_error
 		}
 		if !is_flow {
-			if field.kind == .Menu && previous != nil && previous.kind == .Toggle &&
-			   field.x.mode == .Relative && field.x.value == 0 && field.x.offset == 0 &&
-			   field.y.mode == .Relative && field.y.value == 0 && field.y.offset == 0 {
+			if field.kind == .Menu &&
+			   previous != nil &&
+			   previous.kind == .Toggle &&
+			   field.x.mode == .Relative &&
+			   field.x.value == 0 &&
+			   field.x.offset == 0 &&
+			   field.y.mode == .Relative &&
+			   field.y.value == 0 &&
+			   field.y.offset == 0 {
 				field_x = previous.computed_x
 				if .No_Bullet not_in previous.flags {
 					field_x += previous.margin + 7
@@ -1296,8 +1386,8 @@ layout_forms :: proc(
 		right_aligned_flow := false
 		if is_flow {
 			continues_row := previous != nil && .No_Break in previous.flags
-			right_aligned_flow = field.horizontal_alignment == .Right &&
-			                     field.x.value == 0 && field.x.offset == 0
+			right_aligned_flow =
+				field.horizontal_alignment == .Right && field.x.value == 0 && field.x.offset == 0
 			if right_aligned_flow {
 				if right_cursor < x + width - 2 {
 					right_cursor -= gap
@@ -1363,7 +1453,10 @@ layout_forms :: proc(
 		field.computed_width = field_width
 		field.computed_height = field_height
 
-		if field.kind == .Division || field.kind == .Popup || field.kind == .Menu {
+		if field.kind == .Division ||
+		   field.kind == .Panel ||
+		   field.kind == .Popup ||
+		   field.kind == .Menu {
 			title_height := 0
 			if field.kind == .Popup && field.label > 0 && field.label < len(ctx.texts) {
 				_, text_height, _, _, label_error := measure_label(ctx, &field)
@@ -1379,7 +1472,14 @@ layout_forms :: proc(
 			inner_y := field_y + field.margin
 			inner_width := max(field_width - 2 * field.margin, 0)
 			inner_height := max(field_height - 2 * field.margin, 0)
-			if field.kind != .Division {
+			if field.kind == .Panel {
+				left, top, right, bottom := panel_insets(&field)
+				padding := field.panel_padding
+				inner_x += left + padding.left
+				inner_y += top + padding.top
+				inner_width = max(inner_width - left - right - padding.left - padding.right, 0)
+				inner_height = max(inner_height - top - bottom - padding.top - padding.bottom, 0)
+			} else if field.kind != .Division {
 				border_offset := 0
 				if .No_Border not_in field.flags {
 					border_offset = 1
@@ -1392,27 +1492,39 @@ layout_forms :: proc(
 			field.source_width = 0
 			field.source_height = 0
 			if field.kind == .Popup {
-				has_horizontal := .Horizontal_Scroll in field.flags && field.minimum_width > inner_width
+				has_horizontal :=
+					.Horizontal_Scroll in field.flags && field.minimum_width > inner_width
 				if has_horizontal {
 					inner_height = max(inner_height - ctx.scrollbar_height, 0)
 				}
-				has_vertical := .Vertical_Scroll in field.flags && field.minimum_height > inner_height
+				has_vertical :=
+					.Vertical_Scroll in field.flags && field.minimum_height > inner_height
 				if has_vertical {
 					inner_width = max(inner_width - ctx.scrollbar_width, 0)
 				}
-				if !has_horizontal && .Horizontal_Scroll in field.flags && field.minimum_width > inner_width {
+				if !has_horizontal &&
+				   .Horizontal_Scroll in field.flags &&
+				   field.minimum_width > inner_width {
 					has_horizontal = true
 					inner_height = max(inner_height - ctx.scrollbar_height, 0)
 				}
 				if has_horizontal {
 					field.source_width = inner_width
-					field.offset_x = clamp(field.offset_x, 0, max(field.minimum_width - inner_width, 0))
+					field.offset_x = clamp(
+						field.offset_x,
+						0,
+						max(field.minimum_width - inner_width, 0),
+					)
 				} else {
 					field.offset_x = 0
 				}
 				if has_vertical {
 					field.source_height = inner_height
-					field.offset_y = clamp(field.offset_y, 0, max(field.minimum_height - inner_height, 0))
+					field.offset_y = clamp(
+						field.offset_y,
+						0,
+						max(field.minimum_height - inner_height, 0),
+					)
 				} else {
 					field.offset_y = 0
 				}
@@ -1529,10 +1641,12 @@ measure_form :: proc(
 			}
 		}
 	case .Icon:
-		// UI_ICON has no intrinsic size; its explicit box controls scaling.
+	// UI_ICON has no intrinsic size; its explicit box controls scaling.
 	case .Color:
-		if field.binding.kind != .Color || field.binding.data == nil ||
-		   ctx.font == nil || ctx.font_bounds == nil {
+		if field.binding.kind != .Color ||
+		   field.binding.data == nil ||
+		   ctx.font == nil ||
+		   ctx.font_bounds == nil {
 			return 0, 0, .Invalid_Input
 		}
 		text_width, text_height, left, top: int
@@ -1603,7 +1717,10 @@ measure_form :: proc(
 			middle_skin := &ctx.skin[int(Skin_Image.Button_Normal_Middle)]
 			right_skin := &ctx.skin[int(Skin_Image.Button_Normal_Right)]
 			intrinsic_width += left_skin.width + right_skin.width
-			intrinsic_height = max(intrinsic_height, max(left_skin.height, max(middle_skin.height, right_skin.height)))
+			intrinsic_height = max(
+				intrinsic_height,
+				max(left_skin.height, max(middle_skin.height, right_skin.height)),
+			)
 		}
 		width = max(width, intrinsic_width)
 		height = max(height, intrinsic_height)
@@ -1801,6 +1918,30 @@ measure_form :: proc(
 			width = max(width, desired_width)
 			height = max(height, desired_height)
 		}
+	case .Panel:
+		left, top, right, bottom := panel_insets(field)
+		content_available_width := 4
+		content_available_height := 4
+		if width > 0 {
+			content_available_width = max(width - 2 * field.margin - left - right, 0)
+		}
+		if height > 0 {
+			content_available_height = max(height - 2 * field.margin - top - bottom, 0)
+		}
+		content_width, content_height, content_error := measure_container_content(
+			ctx,
+			field.children,
+			content_available_width,
+			content_available_height,
+			field.pitch,
+		)
+		if content_error != .None {
+			return 0, 0, content_error
+		}
+		field.minimum_width = content_width
+		field.minimum_height = content_height
+		width = max(width, content_width + 2 * field.margin + left + right)
+		height = max(height, content_height + 2 * field.margin + top + bottom)
 	case .Popup, .Menu:
 		content_available_width := 4
 		content_available_height := 4
@@ -1824,7 +1965,10 @@ measure_form :: proc(
 		field.minimum_height = content_height
 		title_height := 0
 		if field.kind == .Popup && field.label > 0 && field.label < len(ctx.texts) {
-			title_width, text_height, title_left, title_top, label_error := measure_label(ctx, field)
+			title_width, text_height, title_left, title_top, label_error := measure_label(
+				ctx,
+				field,
+			)
 			if label_error != .None {
 				return 0, 0, label_error
 			}
@@ -1919,14 +2063,7 @@ ensure_default_font_metrics :: proc(ctx: ^Context) -> Error {
 		return .None
 	}
 	width, left: int
-	return ctx.font_bounds(
-		ctx.font,
-		"Ag",
-		&width,
-		&ctx.default_size,
-		&left,
-		&ctx.default_top,
-	)
+	return ctx.font_bounds(ctx.font, "Ag", &width, &ctx.default_size, &left, &ctx.default_top)
 }
 
 @(private = "file")
@@ -1967,7 +2104,120 @@ draw_overlay_containers :: proc(ctx: ^Context, forms: []Form) -> Error {
 }
 
 @(private = "file")
+panel_nine_slice :: proc(field: ^Form) -> ^Nine_Slice {
+	if field == nil || field.panel_style == nil {
+		return nil
+	}
+	if .Focused in field.flags && nine_slice_valid(&field.panel_style.focused) {
+		return &field.panel_style.focused
+	}
+	if nine_slice_valid(&field.panel_style.normal) {
+		return &field.panel_style.normal
+	}
+	return nil
+}
+
+nine_slice_valid :: proc(slice: ^Nine_Slice) -> bool {
+	if slice == nil {return false}
+	for row in 0 ..< 3 {
+		for column in 0 ..< 3 {
+			if !image_valid(&slice[row][column]) {return false}
+		}
+	}
+	return true
+}
+
+panel_insets :: proc(field: ^Form) -> (left, top, right, bottom: int) {
+	slice := panel_nine_slice(field)
+	if slice == nil {return 3, 3, 3, 3}
+	return slice[0][0].width, slice[0][0].height, slice[0][2].width, slice[2][0].height
+}
+
+@(require_results)
+draw_nine_slice :: proc(
+	ctx: ^Context,
+	x, y, width, height: int,
+	slice: ^Nine_Slice,
+	draw_center := true,
+) -> Error {
+	if ctx == nil || !nine_slice_valid(slice) || width < 1 || height < 1 {
+		return .Invalid_Input
+	}
+	left, top := slice[0][0].width, slice[0][0].height
+	right, bottom := slice[0][2].width, slice[2][0].height
+	center_width := max(width - left - right, 0)
+	center_height := max(height - top - bottom, 0)
+	blit_tiled_image(ctx, x, y, left, top, &slice[0][0], false)
+	blit_tiled_image(ctx, x + left, y, center_width, top, &slice[0][1], false)
+	blit_tiled_image(ctx, x + width - right, y, right, top, &slice[0][2], false)
+	blit_tiled_image(ctx, x, y + top, left, center_height, &slice[1][0], false)
+	if draw_center {
+		blit_tiled_image(ctx, x + left, y + top, center_width, center_height, &slice[1][1], false)
+	}
+	blit_tiled_image(ctx, x + width - right, y + top, right, center_height, &slice[1][2], false)
+	blit_tiled_image(ctx, x, y + height - bottom, left, bottom, &slice[2][0], false)
+	blit_tiled_image(ctx, x + left, y + height - bottom, center_width, bottom, &slice[2][1], false)
+	blit_tiled_image(
+		ctx,
+		x + width - right,
+		y + height - bottom,
+		right,
+		bottom,
+		&slice[2][2],
+		false,
+	)
+	return .None
+}
+
+@(private = "file")
+draw_panel_container :: proc(ctx: ^Context, field: ^Form) -> Error {
+	x, y := field.computed_x, field.computed_y
+	width, height := field.computed_width, field.computed_height
+	if width < 1 || height < 1 {return .Invalid_Input}
+	left, top, right, bottom := panel_insets(field)
+	interior_x := x + left
+	interior_y := y + top
+	interior_width := max(width - left - right, 0)
+	interior_height := max(height - top - bottom, 0)
+	if field.panel_content == .Transparent {
+		clear_rectangle(ctx, interior_x, interior_y, interior_width, interior_height)
+	} else if field.panel_background >> 24 != 0 {
+		fill_rectangle(
+			ctx,
+			interior_x,
+			interior_y,
+			interior_width,
+			interior_height,
+			field.panel_background,
+		)
+	}
+	if slice := panel_nine_slice(field); slice != nil {
+		draw_center := field.panel_content != .Transparent
+		if error := draw_nine_slice(ctx, x, y, width, height, slice, draw_center);
+		   error != .None {return error}
+	} else {
+		light := ctx.theme[int(Theme_Color.Input_Light_Border)]
+		dark := ctx.theme[int(Theme_Color.Input_Dark_Border)]
+		background := ctx.theme[int(Theme_Color.Background)]
+		draw_outline_rectangle(ctx, x, y, width, height, light, background, dark)
+	}
+	old_x0, old_y0 := ctx.clip_x0, ctx.clip_y0
+	old_x1, old_y1 := ctx.clip_x1, ctx.clip_y1
+	ctx.clip_x0 = max(ctx.clip_x0, field.content_x)
+	ctx.clip_y0 = max(ctx.clip_y0, field.content_y)
+	ctx.clip_x1 = min(ctx.clip_x1, field.content_x + field.content_width)
+	ctx.clip_y1 = min(ctx.clip_y1, field.content_y + field.content_height)
+	error := draw_forms(ctx, field.children)
+	ctx.clip_x0, ctx.clip_y0 = old_x0, old_y0
+	ctx.clip_x1, ctx.clip_y1 = old_x1, old_y1
+	return error
+}
+
+@(private = "file")
 draw_container :: proc(ctx: ^Context, field: ^Form) -> Error {
+	if field != nil && field.kind == .Panel {
+		return draw_panel_container(ctx, field)
+	}
 	x, y := field.computed_x, field.computed_y
 	width, height := field.computed_width, field.computed_height
 	if width < 1 || height < 1 || x >= ctx.screen.width || y >= ctx.screen.height {
@@ -2011,21 +2261,92 @@ draw_container :: proc(ctx: ^Context, field: ^Form) -> Error {
 			bottom_left := &ctx.skin[int(frame_start) + 6]
 			bottom_middle := &ctx.skin[int(frame_start) + 7]
 			bottom_right := &ctx.skin[int(frame_start) + 8]
-			blit_tiled_image(ctx, x - top_left.width, y - top_left.height, top_left.width, top_left.height, top_left, false)
-			blit_tiled_image(ctx, x, y - top_middle.height, width, top_middle.height, top_middle, false)
-			blit_tiled_image(ctx, x + width, y - top_right.height, top_right.width, top_right.height, top_right, false)
-			blit_tiled_image(ctx, x - middle_left.width, y, middle_left.width, height, middle_left, false)
+			blit_tiled_image(
+				ctx,
+				x - top_left.width,
+				y - top_left.height,
+				top_left.width,
+				top_left.height,
+				top_left,
+				false,
+			)
+			blit_tiled_image(
+				ctx,
+				x,
+				y - top_middle.height,
+				width,
+				top_middle.height,
+				top_middle,
+				false,
+			)
+			blit_tiled_image(
+				ctx,
+				x + width,
+				y - top_right.height,
+				top_right.width,
+				top_right.height,
+				top_right,
+				false,
+			)
+			blit_tiled_image(
+				ctx,
+				x - middle_left.width,
+				y,
+				middle_left.width,
+				height,
+				middle_left,
+				false,
+			)
 			blit_tiled_image(ctx, x + width, y, middle_right.width, height, middle_right, false)
-			blit_tiled_image(ctx, x - bottom_left.width, y + height, bottom_left.width, bottom_left.height, bottom_left, false)
+			blit_tiled_image(
+				ctx,
+				x - bottom_left.width,
+				y + height,
+				bottom_left.width,
+				bottom_left.height,
+				bottom_left,
+				false,
+			)
 			blit_tiled_image(ctx, x, y + height, width, bottom_middle.height, bottom_middle, false)
-			blit_tiled_image(ctx, x + width, y + height, bottom_right.width, bottom_right.height, bottom_right, false)
+			blit_tiled_image(
+				ctx,
+				x + width,
+				y + height,
+				bottom_right.width,
+				bottom_right.height,
+				bottom_right,
+				false,
+			)
 		} else {
-			draw_outline_rectangle(ctx, x - 1, y - 1, width + 2, height + 2, light, background, dark)
+			draw_outline_rectangle(
+				ctx,
+				x - 1,
+				y - 1,
+				width + 2,
+				height + 2,
+				light,
+				background,
+				dark,
+			)
 			if .No_Shadow not_in field.flags {
 				shadow_right_x := x + width + 1
-				fill_rectangle(ctx, shadow_right_x, y + 3, min(4, max(ctx.screen.width - 1 - shadow_right_x, 0)), height - 2, shadow)
+				fill_rectangle(
+					ctx,
+					shadow_right_x,
+					y + 3,
+					min(4, max(ctx.screen.width - 1 - shadow_right_x, 0)),
+					height - 2,
+					shadow,
+				)
 				shadow_bottom_y := y + height + 1
-				fill_rectangle(ctx, x + 3, shadow_bottom_y, min(width + 2, max(ctx.screen.width - 1 - (x + 3), 0)), min(4, max(ctx.screen.height - 1 - shadow_bottom_y, 0)), shadow)
+				fill_rectangle(
+					ctx,
+					x + 3,
+					shadow_bottom_y,
+					min(width + 2, max(ctx.screen.width - 1 - (x + 3), 0)),
+					min(4, max(ctx.screen.height - 1 - shadow_bottom_y, 0)),
+					shadow,
+				)
 			}
 		}
 	}
@@ -2058,10 +2379,33 @@ draw_container :: proc(ctx: ^Context, field: ^Form) -> Error {
 			close_skin := &ctx.skin[int(close_image)]
 			if image_valid(title_skin) && image_valid(close_skin) {
 				title_height = max(title_height, close_skin.height + 2)
-				blit_tiled_image(ctx, x + 1, y + 1, width - close_skin.width - 1, title_height - 2, title_skin, false)
-				blit_tiled_image(ctx, x + width - close_skin.width, y + (title_height - close_skin.height) / 2, close_skin.width, close_skin.height, close_skin, false)
+				blit_tiled_image(
+					ctx,
+					x + 1,
+					y + 1,
+					width - close_skin.width - 1,
+					title_height - 2,
+					title_skin,
+					false,
+				)
+				blit_tiled_image(
+					ctx,
+					x + width - close_skin.width,
+					y + (title_height - close_skin.height) / 2,
+					close_skin.width,
+					close_skin.height,
+					close_skin,
+					false,
+				)
 			} else {
-				fill_rectangle(ctx, x + 1, y + 1, width - 12, title_height - 2, ctx.theme[int(Theme_Color.Title)])
+				fill_rectangle(
+					ctx,
+					x + 1,
+					y + 1,
+					width - 12,
+					title_height - 2,
+					ctx.theme[int(Theme_Color.Title)],
+				)
 				draw_popup_close(ctx, x + width - 5, y + (title_height + 1) / 2)
 			}
 		}
@@ -2070,7 +2414,8 @@ draw_container :: proc(ctx: ^Context, field: ^Form) -> Error {
 			if .Draggable in field.flags {
 				text_color = background
 			}
-			return_error := draw_font(ctx,
+			return_error := draw_font(
+				ctx,
 				ctx.font,
 				ctx.texts[field.label],
 				ctx.screen.pixels,
@@ -2120,14 +2465,14 @@ draw_container_scrollbars :: proc(ctx: ^Context, field: ^Form) {
 			flags += {.Selected}
 		}
 		bar := Form {
-			kind = .Horizontal_Scrollbar,
-			flags = flags,
-			computed_x = field.content_x,
-			computed_y = field.content_y + field.content_height,
-			computed_width = field.source_width,
+			kind            = .Horizontal_Scrollbar,
+			flags           = flags,
+			computed_x      = field.content_x,
+			computed_y      = field.content_y + field.content_height,
+			computed_width  = field.source_width,
 			computed_height = ctx.scrollbar_height,
-			binding = bind(&value),
-			maximum = i64(field.minimum_width),
+			binding         = bind(&value),
+			maximum         = i64(field.minimum_width),
 		}
 		draw_scrollbar(ctx, &bar)
 	}
@@ -2138,14 +2483,14 @@ draw_container_scrollbars :: proc(ctx: ^Context, field: ^Form) {
 			flags += {.Selected}
 		}
 		bar := Form {
-			kind = .Vertical_Scrollbar,
-			flags = flags,
-			computed_x = field.content_x + field.content_width,
-			computed_y = field.content_y,
-			computed_width = ctx.scrollbar_width,
+			kind            = .Vertical_Scrollbar,
+			flags           = flags,
+			computed_x      = field.content_x + field.content_width,
+			computed_y      = field.content_y,
+			computed_width  = ctx.scrollbar_width,
 			computed_height = field.source_height,
-			binding = bind(&value),
-			maximum = i64(field.minimum_height),
+			binding         = bind(&value),
+			maximum         = i64(field.minimum_height),
 		}
 		draw_scrollbar(ctx, &bar)
 	}
@@ -2182,7 +2527,7 @@ draw_forms :: proc(ctx: ^Context, forms: []Form) -> Error {
 			continue
 		}
 		#partial switch field.kind {
-		case .Division:
+		case .Division, .Panel:
 			if error := draw_container(ctx, &field); error != .None {
 				return error
 			}
@@ -2342,7 +2687,8 @@ draw_toggle :: proc(ctx: ^Context, field: ^Form) -> Error {
 		}
 		x += 9
 	}
-	return draw_font(ctx,
+	return draw_font(
+		ctx,
 		ctx.font,
 		ctx.texts[field.label],
 		ctx.screen.pixels,
@@ -2418,7 +2764,8 @@ draw_label :: proc(ctx: ^Context, field: ^Form) -> Error {
 		}
 		foreground = ctx.theme[int(Theme_Color.Highlight_Foreground)]
 	}
-	return draw_font(ctx,
+	return draw_font(
+		ctx,
 		ctx.font,
 		text,
 		ctx.screen.pixels,
@@ -2468,7 +2815,8 @@ draw_multiline_label :: proc(ctx: ^Context, field: ^Form) -> Error {
 		if y >= field.computed_y + field.computed_height {
 			break
 		}
-		if error := draw_font(ctx,
+		if error := draw_font(
+			ctx,
 			ctx.font,
 			line,
 			ctx.screen.pixels,
@@ -2517,7 +2865,8 @@ draw_status :: proc(ctx: ^Context, field: ^Form) -> Error {
 		)
 	}
 	text, valid := "", false
-	if ctx.hovered != nil && ctx.hovered.description > 0 &&
+	if ctx.hovered != nil &&
+	   ctx.hovered.description > 0 &&
 	   ctx.hovered.description < len(ctx.texts) {
 		text, valid = ctx.texts[ctx.hovered.description], true
 	} else if len(field.text) > 0 {
@@ -2530,7 +2879,8 @@ draw_status :: proc(ctx: ^Context, field: ^Form) -> Error {
 	if .Disabled in field.flags {
 		foreground = ctx.theme[int(Theme_Color.Disabled_Foreground)]
 	}
-	return draw_font(ctx,
+	return draw_font(
+		ctx,
 		ctx.font,
 		text,
 		ctx.screen.pixels,
@@ -2549,18 +2899,32 @@ draw_status :: proc(ctx: ^Context, field: ^Form) -> Error {
 
 @(private = "file")
 image_valid :: proc(image: ^Image) -> bool {
-	return image != nil &&
-	       image.width > 0 &&
-	       image.height > 0 &&
-	       image.pitch >= image.width * 4 &&
-	       len(image.pixels) >= (image.height - 1) * image.pitch + image.width * 4
+	return(
+		image != nil &&
+		image.width > 0 &&
+		image.height > 0 &&
+		image.pitch >= image.width * 4 &&
+		len(image.pixels) >= (image.height - 1) * image.pitch + image.width * 4 \
+	)
 }
 
 @(private = "file")
-blend_image_pixel :: proc(ctx: ^Context, x, y: int, image: ^Image, source_x, source_y: int, grayscale: bool) {
+blend_image_pixel :: proc(
+	ctx: ^Context,
+	x, y: int,
+	image: ^Image,
+	source_x, source_y: int,
+	grayscale: bool,
+) {
 	if !image_valid(image) ||
-	   x < 0 || y < 0 || x >= ctx.screen.width || y >= ctx.screen.height ||
-	   source_x < 0 || source_y < 0 || source_x >= image.width || source_y >= image.height {
+	   x < 0 ||
+	   y < 0 ||
+	   x >= ctx.screen.width ||
+	   y >= ctx.screen.height ||
+	   source_x < 0 ||
+	   source_y < 0 ||
+	   source_x >= image.width ||
+	   source_y >= image.height {
 		return
 	}
 	source := source_y * image.pitch + source_x * 4
@@ -2738,9 +3102,9 @@ draw_checker :: proc(ctx: ^Context, x, y, width, height: int, color: u32) {
 				x + column,
 				y + row,
 				u32(0xff000000) |
-					((blue + inverse * shade) >> 8) |
-					((green + inverse * shade) >> 8) << 8 |
-					((red + inverse * shade) >> 8) << 16,
+				((blue + inverse * shade) >> 8) |
+				((green + inverse * shade) >> 8) << 8 |
+				((red + inverse * shade) >> 8) << 16,
 			)
 		}
 	}
@@ -2795,7 +3159,8 @@ draw_color_input :: proc(ctx: ^Context, field: ^Form) -> Error {
 	}
 	draw_checker(ctx, x + 2, y + 2, height - 4, height - 4, checker_color)
 	text := fmt.tprintf("%08x", value^)
-	return draw_font(ctx,
+	return draw_font(
+		ctx,
 		ctx.font,
 		text,
 		ctx.screen.pixels,
@@ -2853,12 +3218,18 @@ hsv_to_rgb :: proc(alpha, hue, saturation, value: int) -> u32 {
 		q := (value * (255 - ((saturation * fraction + 127) >> 8)) + 127) >> 8
 		t := (value * (255 - ((saturation * (255 - fraction) + 127) >> 8)) + 127) >> 8
 		switch sector {
-		case 0: red, green, blue = value, t, p
-		case 1: red, green, blue = q, value, p
-		case 2: red, green, blue = p, value, t
-		case 3: red, green, blue = p, q, value
-		case 4: red, green, blue = t, p, value
-		case:   red, green, blue = value, p, q
+		case 0:
+			red, green, blue = value, t, p
+		case 1:
+			red, green, blue = q, value, p
+		case 2:
+			red, green, blue = p, value, t
+		case 3:
+			red, green, blue = p, q, value
+		case 4:
+			red, green, blue = t, p, value
+		case:
+			red, green, blue = value, p, q
 		}
 	}
 	return u32(alpha & 255) << 24 | u32(red) << 16 | u32(green) << 8 | u32(blue)
@@ -2882,9 +3253,12 @@ parse_color_edit :: proc(ctx: ^Context) {
 	for character in ctx.color_edit {
 		value <<= 4
 		switch {
-		case character >= '0' && character <= '9': value |= u32(character - '0')
-		case character >= 'a' && character <= 'f': value |= u32(character - 'a' + 10)
-		case character >= 'A' && character <= 'F': value |= u32(character - 'A' + 10)
+		case character >= '0' && character <= '9':
+			value |= u32(character - '0')
+		case character >= 'a' && character <= 'f':
+			value |= u32(character - 'a' + 10)
+		case character >= 'A' && character <= 'F':
+			value |= u32(character - 'A' + 10)
 		case:
 		}
 	}
@@ -2908,8 +3282,22 @@ draw_color_popup :: proc(ctx: ^Context, field: ^Form) -> Error {
 		width -= 2
 		height -= 2
 		if .No_Shadow not_in field.flags {
-			fill_rectangle(ctx, x + width + 1, y + 3, 4, height - 2, ctx.theme[int(Theme_Color.Shadow)])
-			fill_rectangle(ctx, x + 3, y + height + 1, width + 2, 4, ctx.theme[int(Theme_Color.Shadow)])
+			fill_rectangle(
+				ctx,
+				x + width + 1,
+				y + 3,
+				4,
+				height - 2,
+				ctx.theme[int(Theme_Color.Shadow)],
+			)
+			fill_rectangle(
+				ctx,
+				x + 3,
+				y + height + 1,
+				width + 2,
+				4,
+				ctx.theme[int(Theme_Color.Shadow)],
+			)
 		}
 	} else {
 		fill_rectangle(ctx, x, y, width, height, background)
@@ -2921,7 +3309,8 @@ draw_color_popup :: proc(ctx: ^Context, field: ^Form) -> Error {
 	checker_width := max(field.computed_height - 6, 1)
 	draw_checker(ctx, x + 3, y + 3, checker_width, checker_width, ctx.color)
 	if ctx.font_draw != nil {
-		if error := draw_font(ctx,
+		if error := draw_font(
+			ctx,
 			ctx.font,
 			color_edit_string(ctx),
 			ctx.screen.pixels,
@@ -3038,7 +3427,15 @@ draw_button :: proc(ctx: ^Context, field: ^Form) -> Error {
 		}
 	}
 	if skinned {
-		blit_tiled_image(ctx, x, y + (height - left_skin.height) / 2, left_skin.width, left_skin.height, left_skin, disabled)
+		blit_tiled_image(
+			ctx,
+			x,
+			y + (height - left_skin.height) / 2,
+			left_skin.width,
+			left_skin.height,
+			left_skin,
+			disabled,
+		)
 		blit_tiled_image(
 			ctx,
 			x + left_skin.width,
@@ -3118,7 +3515,15 @@ draw_button :: proc(ctx: ^Context, field: ^Form) -> Error {
 		}
 		for row in 0 ..< field.icon.height {
 			for column in 0 ..< field.icon.width {
-				blend_image_pixel(ctx, icon_x + column, icon_y + row, field.icon, column, row, disabled)
+				blend_image_pixel(
+					ctx,
+					icon_x + column,
+					icon_y + row,
+					field.icon,
+					column,
+					row,
+					disabled,
+				)
 			}
 		}
 		text_x += field.icon.width
@@ -3133,7 +3538,8 @@ draw_button :: proc(ctx: ^Context, field: ^Form) -> Error {
 			dark_shadow = ctx.theme[int(Theme_Color.Button_Selected_Dark_Shadow)]
 			light_shadow = ctx.theme[int(Theme_Color.Button_Selected_Light_Shadow)]
 		}
-		if error := draw_font(ctx,
+		if error := draw_font(
+			ctx,
 			ctx.font,
 			text,
 			ctx.screen.pixels,
@@ -3150,7 +3556,8 @@ draw_button :: proc(ctx: ^Context, field: ^Form) -> Error {
 		); error != .None {
 			return error
 		}
-		if error := draw_font(ctx,
+		if error := draw_font(
+			ctx,
 			ctx.font,
 			text,
 			ctx.screen.pixels,
@@ -3177,7 +3584,8 @@ draw_button :: proc(ctx: ^Context, field: ^Form) -> Error {
 	} else if hovered {
 		foreground = ctx.theme[int(Theme_Color.Button_Selected_Foreground)]
 	}
-	return draw_font(ctx,
+	return draw_font(
+		ctx,
 		ctx.font,
 		text,
 		ctx.screen.pixels,
@@ -3245,7 +3653,8 @@ draw_choice :: proc(ctx: ^Context, field: ^Form) -> Error {
 	if disabled {
 		foreground = ctx.theme[int(Theme_Color.Disabled_Foreground)]
 	}
-	return draw_font(ctx,
+	return draw_font(
+		ctx,
 		ctx.font,
 		text,
 		ctx.screen.pixels,
@@ -3345,7 +3754,8 @@ draw_text_input :: proc(ctx: ^Context, field: ^Form) -> Error {
 		}
 		visible_start = ctx.text_scroll
 	}
-	if error := draw_font(ctx,
+	if error := draw_font(
+		ctx,
 		ctx.font,
 		text[visible_start:],
 		ctx.screen.pixels,
@@ -3402,16 +3812,7 @@ draw_option_input :: proc(ctx: ^Context, field: ^Form) -> Error {
 		input_dark = input_foreground
 		button_background = input_foreground
 	}
-	draw_outline_rectangle(
-		ctx,
-		x,
-		y,
-		width,
-		height,
-		input_dark,
-		input_background,
-		input_light,
-	)
+	draw_outline_rectangle(ctx, x, y, width, height, input_dark, input_background, input_light)
 	x += 1
 	y += 1
 	width -= 2
@@ -3430,16 +3831,7 @@ draw_option_input :: proc(ctx: ^Context, field: ^Form) -> Error {
 		right_top, right_bottom = button_dark, button_light
 		right_shift = 1
 	}
-	draw_outline_rectangle(
-		ctx,
-		x,
-		y,
-		height,
-		height,
-		left_top,
-		button_background,
-		left_bottom,
-	)
+	draw_outline_rectangle(ctx, x, y, height, height, left_top, button_background, left_bottom)
 	fill_rectangle(ctx, x + 1, y + 1, height - 2, height - 2, button_background)
 	right_x := x + width - height
 	draw_outline_rectangle(
@@ -3488,10 +3880,27 @@ draw_option_input :: proc(ctx: ^Context, field: ^Form) -> Error {
 		}
 		left_skin := &ctx.skin[int(left_image)]
 		right_skin := &ctx.skin[int(right_image)]
-		blit_tiled_image(ctx, x, y + 1 + (height - left_skin.height) / 2, left_skin.width, left_skin.height, left_skin, disabled)
-		blit_tiled_image(ctx, x + width - right_skin.width, y + 1 + (height - right_skin.height) / 2, right_skin.width, right_skin.height, right_skin, disabled)
+		blit_tiled_image(
+			ctx,
+			x,
+			y + 1 + (height - left_skin.height) / 2,
+			left_skin.width,
+			left_skin.height,
+			left_skin,
+			disabled,
+		)
+		blit_tiled_image(
+			ctx,
+			x + width - right_skin.width,
+			y + 1 + (height - right_skin.height) / 2,
+			right_skin.width,
+			right_skin.height,
+			right_skin,
+			disabled,
+		)
 	}
-	return draw_font(ctx,
+	return draw_font(
+		ctx,
 		ctx.font,
 		text,
 		ctx.screen.pixels,
@@ -3550,16 +3959,7 @@ draw_choice_input :: proc(ctx: ^Context, field: ^Form) -> Error {
 		input_dark = input_foreground
 		button_background = input_foreground
 	}
-	draw_outline_rectangle(
-		ctx,
-		x,
-		y,
-		width,
-		height,
-		input_dark,
-		input_background,
-		input_light,
-	)
+	draw_outline_rectangle(ctx, x, y, width, height, input_dark, input_background, input_light)
 	x += 1
 	y += 1
 	width -= 2
@@ -3593,9 +3993,18 @@ draw_choice_input :: proc(ctx: ^Context, field: ^Form) -> Error {
 			arrow_image = .Arrow_Down_Selected
 		}
 		arrow_skin := &ctx.skin[int(arrow_image)]
-		blit_tiled_image(ctx, x + width - arrow_skin.width, y + 1 + (height - arrow_skin.height) / 2, arrow_skin.width, arrow_skin.height, arrow_skin, disabled)
+		blit_tiled_image(
+			ctx,
+			x + width - arrow_skin.width,
+			y + 1 + (height - arrow_skin.height) / 2,
+			arrow_skin.width,
+			arrow_skin.height,
+			arrow_skin,
+			disabled,
+		)
 	}
-	return draw_font(ctx,
+	return draw_font(
+		ctx,
 		ctx.font,
 		text,
 		ctx.screen.pixels,
@@ -3626,8 +4035,22 @@ draw_select_popup :: proc(ctx: ^Context, field: ^Form) -> Error {
 	width -= 2
 	height -= 2
 	if .No_Shadow not_in field.flags {
-		fill_rectangle(ctx, x + width + 1, y + 3, 4, height - 2, ctx.theme[int(Theme_Color.Shadow)])
-		fill_rectangle(ctx, x + 3, y + height + 1, width + 2, 4, ctx.theme[int(Theme_Color.Shadow)])
+		fill_rectangle(
+			ctx,
+			x + width + 1,
+			y + 3,
+			4,
+			height - 2,
+			ctx.theme[int(Theme_Color.Shadow)],
+		)
+		fill_rectangle(
+			ctx,
+			x + 3,
+			y + height + 1,
+			width + 2,
+			4,
+			ctx.theme[int(Theme_Color.Shadow)],
+		)
 	}
 	input_skin := &ctx.skin[int(Skin_Image.Input)]
 	if image_valid(input_skin) {
@@ -3646,7 +4069,15 @@ draw_select_popup :: proc(ctx: ^Context, field: ^Form) -> Error {
 			field.selected_option = index
 			highlight_skin := &ctx.skin[int(Skin_Image.Highlight)]
 			if image_valid(highlight_skin) {
-				blit_tiled_image(ctx, x + 1, row_y + 1, width - 2, row_height, highlight_skin, false)
+				blit_tiled_image(
+					ctx,
+					x + 1,
+					row_y + 1,
+					width - 2,
+					row_height,
+					highlight_skin,
+					false,
+				)
 			} else {
 				fill_rectangle(
 					ctx,
@@ -3659,7 +4090,8 @@ draw_select_popup :: proc(ctx: ^Context, field: ^Form) -> Error {
 			}
 			foreground = ctx.theme[int(Theme_Color.Highlight_Foreground)]
 		}
-		if error := draw_font(ctx,
+		if error := draw_font(
+			ctx,
 			ctx.font,
 			option,
 			ctx.screen.pixels,
@@ -3692,7 +4124,8 @@ draw_clipped_text :: proc(
 	   error != .None {
 		return error
 	}
-	return draw_font(ctx,
+	return draw_font(
+		ctx,
 		ctx.font,
 		text,
 		ctx.screen.pixels,
@@ -3713,13 +4146,15 @@ draw_clipped_text :: proc(
 select_popup_geometry :: proc(
 	ctx: ^Context,
 	field: ^Form,
-) -> (x, y, width, height, row_height: int) {
+) -> (
+	x, y, width, height, row_height: int,
+) {
 	if ctx.popup == field && ctx.popup_width > 0 && ctx.popup_height > 0 {
 		return ctx.popup_x,
-		       ctx.popup_y,
-		       ctx.popup_width,
-		       ctx.popup_height,
-		       field.computed_height - 4
+			ctx.popup_y,
+			ctx.popup_width,
+			ctx.popup_height,
+			field.computed_height - 4
 	}
 	x = field.computed_x
 	width = field.computed_width
@@ -3880,8 +4315,24 @@ draw_numeric_input :: proc(ctx: ^Context, field: ^Form) -> Error {
 		}
 		left_skin := &ctx.skin[int(left_image)]
 		right_skin := &ctx.skin[int(right_image)]
-		blit_tiled_image(ctx, inner_x, inner_y + 1 + (inner_height - left_skin.height) / 2, left_skin.width, left_skin.height, left_skin, disabled)
-		blit_tiled_image(ctx, inner_x + inner_width - right_skin.width, inner_y + 1 + (inner_height - right_skin.height) / 2, right_skin.width, right_skin.height, right_skin, disabled)
+		blit_tiled_image(
+			ctx,
+			inner_x,
+			inner_y + 1 + (inner_height - left_skin.height) / 2,
+			left_skin.width,
+			left_skin.height,
+			left_skin,
+			disabled,
+		)
+		blit_tiled_image(
+			ctx,
+			inner_x + inner_width - right_skin.width,
+			inner_y + 1 + (inner_height - right_skin.height) / 2,
+			right_skin.width,
+			right_skin.height,
+			right_skin,
+			disabled,
+		)
 	}
 
 	text_width, text_height, left, top: int
@@ -3891,7 +4342,8 @@ draw_numeric_input :: proc(ctx: ^Context, field: ^Form) -> Error {
 	}
 	text_x :=
 		inner_x + inner_height + 2 + inner_width - 2 * inner_height - 4 - text_width - field.left
-	if error := draw_font(ctx,
+	if error := draw_font(
+		ctx,
 		ctx.font,
 		text,
 		ctx.screen.pixels,
@@ -3916,13 +4368,7 @@ draw_down_triangle :: proc(ctx: ^Context, x, y: int, light, background, dark: u3
 	if x < 0 || y < 0 || x + 7 >= ctx.screen.width || y + 7 >= ctx.screen.height {
 		return
 	}
-	rows := [5]string {
-		"ddddddd",
-		"dbbbbbl",
-		".dbbbl.",
-		"..dbl..",
-		"...l...",
-	}
+	rows := [5]string{"ddddddd", "dbbbbbl", ".dbbbl.", "..dbl..", "...l..."}
 	for row, row_index in rows {
 		for pixel, column in transmute([]u8)(row) {
 			color := background
@@ -3996,7 +4442,8 @@ draw_symbol :: proc(ctx: ^Context, symbol: string, x, y, width, height: int, col
 	   error != .None {
 		return error
 	}
-	return draw_font(ctx,
+	return draw_font(
+		ctx,
 		ctx.font,
 		symbol,
 		ctx.screen.pixels,
@@ -4052,7 +4499,15 @@ draw_slider :: proc(ctx: ^Context, field: ^Form) {
 		left_skin := &ctx.skin[int(Skin_Image.Slider_Left)]
 		middle_skin := &ctx.skin[int(Skin_Image.Slider_Middle)]
 		right_skin := &ctx.skin[int(Skin_Image.Slider_Right)]
-		blit_tiled_image(ctx, x, y + (height - left_skin.height) / 2, left_skin.width, left_skin.height, left_skin, disabled)
+		blit_tiled_image(
+			ctx,
+			x,
+			y + (height - left_skin.height) / 2,
+			left_skin.width,
+			left_skin.height,
+			left_skin,
+			disabled,
+		)
 		blit_tiled_image(
 			ctx,
 			x + left_skin.width,
@@ -4062,8 +4517,24 @@ draw_slider :: proc(ctx: ^Context, field: ^Form) {
 			middle_skin,
 			disabled,
 		)
-		blit_tiled_image(ctx, x + width - right_skin.width, y + (height - right_skin.height) / 2, right_skin.width, right_skin.height, right_skin, disabled)
-		blit_tiled_image(ctx, x + position + 3 - button_skin.width / 2, y + (height - button_skin.height) / 2, button_skin.width, button_skin.height, button_skin, disabled)
+		blit_tiled_image(
+			ctx,
+			x + width - right_skin.width,
+			y + (height - right_skin.height) / 2,
+			right_skin.width,
+			right_skin.height,
+			right_skin,
+			disabled,
+		)
+		blit_tiled_image(
+			ctx,
+			x + position + 3 - button_skin.width / 2,
+			y + (height - button_skin.height) / 2,
+			button_skin.width,
+			button_skin.height,
+			button_skin,
+			disabled,
+		)
 		return
 	}
 	dark := ctx.theme[int(Theme_Color.Input_Dark_Border)]
@@ -4121,12 +4592,60 @@ draw_scrollbar :: proc(ctx: ^Context, field: ^Form) {
 		button_middle := &ctx.skin[int(Skin_Image.Vertical_Scrollbar_Button_Middle)]
 		button_bottom := &ctx.skin[int(Skin_Image.Vertical_Scrollbar_Button_Bottom)]
 		x, y := field.computed_x, field.computed_y
-		blit_tiled_image(ctx, x + (thickness - track_top.width) / 2, y, track_top.width, track_top.height, track_top, disabled)
-		blit_tiled_image(ctx, x + (thickness - track_middle.width) / 2, y + track_top.height, track_middle.width, size - track_top.height - track_bottom.height, track_middle, disabled)
-		blit_tiled_image(ctx, x + (thickness - track_bottom.width) / 2, y + size - track_bottom.height, track_bottom.width, track_bottom.height, track_bottom, disabled)
-		blit_tiled_image(ctx, x + (thickness - button_top.width) / 2, y + position, button_top.width, button_top.height, button_top, disabled)
-		blit_tiled_image(ctx, x + (thickness - button_middle.width) / 2, y + position + button_top.height, button_middle.width, thumb - button_top.height - button_bottom.height, button_middle, disabled)
-		blit_tiled_image(ctx, x + (thickness - button_bottom.width) / 2, y + position + thumb - button_bottom.height, button_bottom.width, button_bottom.height, button_bottom, disabled)
+		blit_tiled_image(
+			ctx,
+			x + (thickness - track_top.width) / 2,
+			y,
+			track_top.width,
+			track_top.height,
+			track_top,
+			disabled,
+		)
+		blit_tiled_image(
+			ctx,
+			x + (thickness - track_middle.width) / 2,
+			y + track_top.height,
+			track_middle.width,
+			size - track_top.height - track_bottom.height,
+			track_middle,
+			disabled,
+		)
+		blit_tiled_image(
+			ctx,
+			x + (thickness - track_bottom.width) / 2,
+			y + size - track_bottom.height,
+			track_bottom.width,
+			track_bottom.height,
+			track_bottom,
+			disabled,
+		)
+		blit_tiled_image(
+			ctx,
+			x + (thickness - button_top.width) / 2,
+			y + position,
+			button_top.width,
+			button_top.height,
+			button_top,
+			disabled,
+		)
+		blit_tiled_image(
+			ctx,
+			x + (thickness - button_middle.width) / 2,
+			y + position + button_top.height,
+			button_middle.width,
+			thumb - button_top.height - button_bottom.height,
+			button_middle,
+			disabled,
+		)
+		blit_tiled_image(
+			ctx,
+			x + (thickness - button_bottom.width) / 2,
+			y + position + thumb - button_bottom.height,
+			button_bottom.width,
+			button_bottom.height,
+			button_bottom,
+			disabled,
+		)
 		return
 	}
 	if !vertical && image_valid(&ctx.skin[int(Skin_Image.Horizontal_Scrollbar_Button_Middle)]) {
@@ -4137,12 +4656,60 @@ draw_scrollbar :: proc(ctx: ^Context, field: ^Form) {
 		button_middle := &ctx.skin[int(Skin_Image.Horizontal_Scrollbar_Button_Middle)]
 		button_right := &ctx.skin[int(Skin_Image.Horizontal_Scrollbar_Button_Right)]
 		x, y := field.computed_x, field.computed_y
-		blit_tiled_image(ctx, x, y + (thickness - track_left.height) / 2, track_left.width, track_left.height, track_left, disabled)
-		blit_tiled_image(ctx, x + track_left.width, y + (thickness - track_middle.height) / 2, size - track_left.width - track_right.width, track_middle.height, track_middle, disabled)
-		blit_tiled_image(ctx, x + size - track_right.width, y + (thickness - track_right.height) / 2, track_right.width, track_right.height, track_right, disabled)
-		blit_tiled_image(ctx, x + position, y + (thickness - button_left.height) / 2, button_left.width, button_left.height, button_left, disabled)
-		blit_tiled_image(ctx, x + position + button_left.width, y + (thickness - button_middle.height) / 2, thumb - button_left.width - button_right.width, button_middle.height, button_middle, disabled)
-		blit_tiled_image(ctx, x + position + thumb - button_right.width, y + (thickness - button_right.height) / 2, button_right.width, button_right.height, button_right, disabled)
+		blit_tiled_image(
+			ctx,
+			x,
+			y + (thickness - track_left.height) / 2,
+			track_left.width,
+			track_left.height,
+			track_left,
+			disabled,
+		)
+		blit_tiled_image(
+			ctx,
+			x + track_left.width,
+			y + (thickness - track_middle.height) / 2,
+			size - track_left.width - track_right.width,
+			track_middle.height,
+			track_middle,
+			disabled,
+		)
+		blit_tiled_image(
+			ctx,
+			x + size - track_right.width,
+			y + (thickness - track_right.height) / 2,
+			track_right.width,
+			track_right.height,
+			track_right,
+			disabled,
+		)
+		blit_tiled_image(
+			ctx,
+			x + position,
+			y + (thickness - button_left.height) / 2,
+			button_left.width,
+			button_left.height,
+			button_left,
+			disabled,
+		)
+		blit_tiled_image(
+			ctx,
+			x + position + button_left.width,
+			y + (thickness - button_middle.height) / 2,
+			thumb - button_left.width - button_right.width,
+			button_middle.height,
+			button_middle,
+			disabled,
+		)
+		blit_tiled_image(
+			ctx,
+			x + position + thumb - button_right.width,
+			y + (thickness - button_right.height) / 2,
+			button_right.width,
+			button_right.height,
+			button_right,
+			disabled,
+		)
 		return
 	}
 	light := ctx.theme[int(Theme_Color.Input_Light_Border)]
@@ -4246,7 +4813,16 @@ draw_progress_bar :: proc(ctx: ^Context, field: ^Form) -> Error {
 	}
 	input_skin := &ctx.skin[int(Skin_Image.Input)]
 	if image_valid(input_skin) {
-		blit_tiled_image(ctx, x + filled, y, width - filled, height, input_skin, false, filled % input_skin.width)
+		blit_tiled_image(
+			ctx,
+			x + filled,
+			y,
+			width - filled,
+			height,
+			input_skin,
+			false,
+			filled % input_skin.width,
+		)
 	} else {
 		fill_rectangle(
 			ctx,
@@ -4264,7 +4840,8 @@ draw_progress_bar :: proc(ctx: ^Context, field: ^Form) -> Error {
 	   error != .None {
 		return error
 	}
-	error := draw_font(ctx,
+	error := draw_font(
+		ctx,
 		ctx.font,
 		text,
 		ctx.screen.pixels,
@@ -4298,7 +4875,8 @@ draw_bound_value :: proc(ctx: ^Context, field: ^Form) -> Error {
 		return bounds_error
 	}
 	_, _, _ = text_height, left, top
-	return draw_font(ctx,
+	return draw_font(
+		ctx,
 		ctx.font,
 		text,
 		ctx.screen.pixels,
@@ -4325,7 +4903,8 @@ draw_text_centered :: proc(ctx: ^Context, text: string, field: ^Form, color: u32
 	   error != .None {
 		return error
 	}
-	return draw_font(ctx,
+	return draw_font(
+		ctx,
 		ctx.font,
 		text,
 		ctx.screen.pixels,
@@ -4390,7 +4969,15 @@ draw_checkbox :: proc(ctx: ^Context, x, y, clip_width: int, checked, disabled: b
 		old_clip_x0, old_clip_x1 := ctx.clip_x0, ctx.clip_x1
 		ctx.clip_x0 = max(ctx.clip_x0, x - clip_width / 2)
 		ctx.clip_x1 = min(ctx.clip_x1, x - clip_width / 2 + clip_width)
-		blit_tiled_image(ctx, x - skin.width / 2, y - skin.height / 2, skin.width, skin.height, skin, disabled)
+		blit_tiled_image(
+			ctx,
+			x - skin.width / 2,
+			y - skin.height / 2,
+			skin.width,
+			skin.height,
+			skin,
+			disabled,
+		)
 		ctx.clip_x0, ctx.clip_x1 = old_clip_x0, old_clip_x1
 		return
 	}
@@ -4424,7 +5011,15 @@ draw_radio :: proc(ctx: ^Context, x, y, clip_width: int, checked, disabled: bool
 		old_clip_x0, old_clip_x1 := ctx.clip_x0, ctx.clip_x1
 		ctx.clip_x0 = max(ctx.clip_x0, x - clip_width / 2)
 		ctx.clip_x1 = min(ctx.clip_x1, x - clip_width / 2 + clip_width)
-		blit_tiled_image(ctx, x - skin.width / 2, y - skin.height / 2, skin.width, skin.height, skin, disabled)
+		blit_tiled_image(
+			ctx,
+			x - skin.width / 2,
+			y - skin.height / 2,
+			skin.width,
+			skin.height,
+			skin,
+			disabled,
+		)
 		ctx.clip_x0, ctx.clip_x1 = old_clip_x0, old_clip_x1
 		return
 	}
@@ -4518,7 +5113,7 @@ update_hover :: proc(ctx: ^Context, form: []Form) {
 	}
 	if ctx.hovered != previous ||
 	   (image_valid(&ctx.software_cursor) &&
-	    (ctx.mouse_x != ctx.rendered_mouse_x || ctx.mouse_y != ctx.rendered_mouse_y)) {
+			   (ctx.mouse_x != ctx.rendered_mouse_x || ctx.mouse_y != ctx.rendered_mouse_y)) {
 		ctx.flags += {.Refresh}
 	}
 }
@@ -4537,7 +5132,7 @@ hovered_form_at :: proc(forms: []Form, x, y: int) -> ^Form {
 			continue
 		}
 		candidate = &field
-		if field.kind == .Division {
+		if field.kind == .Division || field.kind == .Panel {
 			if child := hovered_form_at(field.children, x, y); child != nil {
 				candidate = child
 			}
@@ -4557,7 +5152,8 @@ hovered_container_at :: proc(container: ^Form, x, y: int) -> ^Form {
 				break
 			}
 			if .Hidden not_in child.flags &&
-			   y >= child.computed_y && y < child.computed_y + child.computed_height {
+			   y >= child.computed_y &&
+			   y < child.computed_y + child.computed_height {
 				return &child
 			}
 		}
@@ -4576,8 +5172,11 @@ consume_event :: proc(event: ^Event) {
 
 @(private = "file")
 is_wheel_event :: proc(event: ^Event) -> bool {
-	return event != nil && event.kind == .Mouse &&
-	       (.Direction_Up in event.buttons || .Direction_Down in event.buttons)
+	return(
+		event != nil &&
+		event.kind == .Mouse &&
+		(.Direction_Up in event.buttons || .Direction_Down in event.buttons) \
+	)
 }
 
 @(private = "file")
@@ -4620,9 +5219,13 @@ process_custom_popup_event :: proc(ctx: ^Context, event: ^Event) -> Error {
 	if field == nil || field.kind != .Custom {
 		return .Invalid_Input
 	}
-	outside := event.kind == .Mouse && .Released not_in event.buttons &&
-	           (event.x < ctx.popup_x || event.x >= ctx.popup_x + ctx.popup_width ||
-	            event.y < ctx.popup_y || event.y >= ctx.popup_y + ctx.popup_height)
+	outside :=
+		event.kind == .Mouse &&
+		.Released not_in event.buttons &&
+		(event.x < ctx.popup_x ||
+				event.x >= ctx.popup_x + ctx.popup_width ||
+				event.y < ctx.popup_y ||
+				event.y >= ctx.popup_y + ctx.popup_height)
 	if .Close in ctx.flags || field.custom.control == nil || outside {
 		close_custom_popup(ctx)
 		consume_event(event)
@@ -4651,8 +5254,7 @@ process_custom_popup_event :: proc(ctx: ^Context, event: ^Event) -> Error {
 
 @(private = "file")
 process_event :: proc(ctx: ^Context, form: []Form, event: ^Event) -> Error {
-	if event.kind == .Mouse ||
-	   (event.kind == .Key && (event.x != 0 || event.y != 0)) {
+	if event.kind == .Mouse || (event.kind == .Key && (event.x != 0 || event.y != 0)) {
 		ctx.mouse_x = event.x
 		ctx.mouse_y = event.y
 	}
@@ -4673,8 +5275,7 @@ process_event :: proc(ctx: ^Context, form: []Form, event: ^Event) -> Error {
 	}
 	if event.kind == .Key {
 		update_hover(ctx, form)
-		if (key_text(&event.key) == "Escape" || key_text(&event.key) == "\e") &&
-		   ctx.menu != nil {
+		if (key_text(&event.key) == "Escape" || key_text(&event.key) == "\e") && ctx.menu != nil {
 			close_menu(ctx)
 			consume_event(event)
 			return .None
@@ -4690,14 +5291,18 @@ process_event :: proc(ctx: ^Context, form: []Form, event: ^Event) -> Error {
 			}
 			return error
 		}
-		if ctx.hovered != nil && ctx.hovered.kind == .Custom && .Disabled not_in ctx.hovered.flags {
+		if ctx.hovered != nil &&
+		   ctx.hovered.kind == .Custom &&
+		   .Disabled not_in ctx.hovered.flags {
 			return invoke_custom_control(ctx, ctx.hovered, event)
 		}
 		return .None
 	}
 	if event.kind != .Mouse {
 		update_hover(ctx, form)
-		if ctx.hovered != nil && ctx.hovered.kind == .Custom && .Disabled not_in ctx.hovered.flags {
+		if ctx.hovered != nil &&
+		   ctx.hovered.kind == .Custom &&
+		   .Disabled not_in ctx.hovered.flags {
 			return invoke_custom_control(ctx, ctx.hovered, event)
 		}
 		return .None
@@ -4722,8 +5327,16 @@ process_event :: proc(ctx: ^Context, form: []Form, event: ^Event) -> Error {
 		return .None
 	}
 	if ctx.dragged != nil {
-		new_x := clamp(event.x - ctx.drag_x, 1, max(ctx.screen.width - ctx.dragged.computed_width - 1, 1))
-		new_y := clamp(event.y - ctx.drag_y, 1, max(ctx.screen.height - ctx.dragged.computed_height - 1, 1))
+		new_x := clamp(
+			event.x - ctx.drag_x,
+			1,
+			max(ctx.screen.width - ctx.dragged.computed_width - 1, 1),
+		)
+		new_y := clamp(
+			event.y - ctx.drag_y,
+			1,
+			max(ctx.screen.height - ctx.dragged.computed_height - 1, 1),
+		)
 		ctx.dragged.horizontal_alignment = .Left
 		ctx.dragged.vertical_alignment = .Top
 		ctx.dragged.x = absolute(new_x)
@@ -4760,7 +5373,9 @@ process_event :: proc(ctx: ^Context, form: []Form, event: ^Event) -> Error {
 		return .None
 	}
 	update_hover(ctx, form)
-	if ctx.hovered != nil && ctx.hovered.kind == .Custom && .Disabled not_in ctx.hovered.flags &&
+	if ctx.hovered != nil &&
+	   ctx.hovered.kind == .Custom &&
+	   .Disabled not_in ctx.hovered.flags &&
 	   ctx.hovered.custom.control != nil {
 		error := invoke_custom_control(ctx, ctx.hovered, event)
 		if error == .None {
@@ -4772,7 +5387,9 @@ process_event :: proc(ctx: ^Context, form: []Form, event: ^Event) -> Error {
 	inside_overlay := ctx.menu != nil && point_inside(ctx.menu, event.x, event.y)
 	if !inside_overlay {
 		for &field in form {
-			if field.kind == .Popup && .Hidden not_in field.flags && point_inside(&field, event.x, event.y) {
+			if field.kind == .Popup &&
+			   .Hidden not_in field.flags &&
+			   point_inside(&field, event.x, event.y) {
 				inside_overlay = true
 				break
 			}
@@ -4780,8 +5397,10 @@ process_event :: proc(ctx: ^Context, form: []Form, event: ^Event) -> Error {
 	}
 	if is_wheel_event(event) && ctx.hovered != nil && .Disabled not_in ctx.hovered.flags {
 		direction := 1
-		if .Direction_Down in event.buttons && .Direction_Up not_in event.buttons &&
-		   ctx.hovered.kind != .Select && ctx.hovered.kind != .Option {
+		if .Direction_Down in event.buttons &&
+		   .Direction_Up not_in event.buttons &&
+		   ctx.hovered.kind != .Select &&
+		   ctx.hovered.kind != .Option {
 			direction = -1
 		}
 		handled := true
@@ -4803,7 +5422,9 @@ process_event :: proc(ctx: ^Context, form: []Form, event: ^Event) -> Error {
 		for reverse_index in 0 ..< len(form) {
 			index := len(form) - 1 - reverse_index
 			field := &form[index]
-			if field.kind != .Popup || .Hidden in field.flags || !point_inside(field, event.x, event.y) {
+			if field.kind != .Popup ||
+			   .Hidden in field.flags ||
+			   !point_inside(field, event.x, event.y) {
 				continue
 			}
 			title_height := 0
@@ -4843,7 +5464,9 @@ process_event :: proc(ctx: ^Context, form: []Form, event: ^Event) -> Error {
 		for reverse_index in 0 ..< len(form) {
 			index := len(form) - 1 - reverse_index
 			field := &form[index]
-			if field.kind == .Popup && .Hidden not_in field.flags && point_inside(field, event.x, event.y) &&
+			if field.kind == .Popup &&
+			   .Hidden not_in field.flags &&
+			   point_inside(field, event.x, event.y) &&
 			   begin_container_scrollbar_if_hit(ctx, field, event.x, event.y) {
 				consume_event(event)
 				return .None
@@ -4856,12 +5479,16 @@ process_event :: proc(ctx: ^Context, form: []Form, event: ^Event) -> Error {
 		}
 	}
 	if event.kind == .Mouse &&
-	   (.Direction_Up in event.buttons || .Direction_Down in event.buttons ||
-	    .Gamepad_A in event.buttons || .Gamepad_B in event.buttons) {
+	   (.Direction_Up in event.buttons ||
+			   .Direction_Down in event.buttons ||
+			   .Gamepad_A in event.buttons ||
+			   .Gamepad_B in event.buttons) {
 		for reverse_index in 0 ..< len(form) {
 			index := len(form) - 1 - reverse_index
 			field := &form[index]
-			if field.kind != .Popup || .Hidden in field.flags || !point_inside(field, event.x, event.y) {
+			if field.kind != .Popup ||
+			   .Hidden in field.flags ||
+			   !point_inside(field, event.x, event.y) {
 				continue
 			}
 			vertical_step := max(field.computed_height / 10, 4)
@@ -4875,8 +5502,16 @@ process_event :: proc(ctx: ^Context, form: []Form, event: ^Event) -> Error {
 			} else if .Gamepad_B in event.buttons {
 				field.offset_x += horizontal_step
 			}
-			field.offset_x = clamp(field.offset_x, 0, max(field.minimum_width - field.source_width, 0))
-			field.offset_y = clamp(field.offset_y, 0, max(field.minimum_height - field.source_height, 0))
+			field.offset_x = clamp(
+				field.offset_x,
+				0,
+				max(field.minimum_width - field.source_width, 0),
+			)
+			field.offset_y = clamp(
+				field.offset_y,
+				0,
+				max(field.minimum_height - field.source_height, 0),
+			)
 			ctx.flags += {.Refresh, .Recalculate}
 			consume_event(event)
 			return .None
@@ -5095,9 +5730,10 @@ process_color_popup_event :: proc(ctx: ^Context, event: ^Event) -> Error {
 			return .None
 		}
 		for character in key {
-			is_hex := (character >= '0' && character <= '9') ||
-			          (character >= 'a' && character <= 'f') ||
-			          (character >= 'A' && character <= 'F')
+			is_hex :=
+				(character >= '0' && character <= '9') ||
+				(character >= 'a' && character <= 'f') ||
+				(character >= 'A' && character <= 'F')
 			if is_hex {
 				if ctx.color_cursor >= len(ctx.color_edit) {
 					ctx.color_cursor = 0
@@ -5113,8 +5749,11 @@ process_color_popup_event :: proc(ctx: ^Context, event: ^Event) -> Error {
 	if event.kind != .Mouse {
 		return .None
 	}
-	inside := event.x >= ctx.popup_x && event.x < ctx.popup_x + ctx.popup_width &&
-	          event.y >= ctx.popup_y && event.y < ctx.popup_y + ctx.popup_height
+	inside :=
+		event.x >= ctx.popup_x &&
+		event.x < ctx.popup_x + ctx.popup_width &&
+		event.y >= ctx.popup_y &&
+		event.y < ctx.popup_y + ctx.popup_height
 	if .Mouse_Left in event.buttons && !inside {
 		close_color_popup(ctx, false)
 		return .None
@@ -5151,10 +5790,20 @@ process_color_popup_event :: proc(ctx: ^Context, event: ^Event) -> Error {
 		case 3:
 			ctx.color_saturation = saturation
 			ctx.color_value = 255 - picker_y_offset
-			ctx.color = hsv_to_rgb(int(u8(ctx.color >> 24)), ctx.color_hue, ctx.color_saturation, ctx.color_value)
+			ctx.color = hsv_to_rgb(
+				int(u8(ctx.color >> 24)),
+				ctx.color_hue,
+				ctx.color_saturation,
+				ctx.color_value,
+			)
 		case 4:
 			ctx.color_hue = picker_y_offset
-			ctx.color = hsv_to_rgb(int(u8(ctx.color >> 24)), ctx.color_hue, ctx.color_saturation, ctx.color_value)
+			ctx.color = hsv_to_rgb(
+				int(u8(ctx.color >> 24)),
+				ctx.color_hue,
+				ctx.color_saturation,
+				ctx.color_value,
+			)
 		case:
 		}
 		set_color_edit(ctx)
@@ -5177,7 +5826,10 @@ toggle_bound_container :: proc(ctx: ^Context, trigger: ^Form) {
 		return
 	}
 	target := (^Form)(trigger.binding.data)
-	if target.kind != .Popup && target.kind != .Menu && target.kind != .Division {
+	if target.kind != .Popup &&
+	   target.kind != .Menu &&
+	   target.kind != .Division &&
+	   target.kind != .Panel {
 		return
 	}
 	if target.kind == .Menu {
@@ -5196,7 +5848,7 @@ toggle_bound_container :: proc(ctx: ^Context, trigger: ^Form) {
 	} else {
 		target.flags += {.Hidden}
 	}
-	if target.kind == .Division {
+	if target.kind == .Division || target.kind == .Panel {
 		ctx.flags += {.Recalculate}
 	}
 }
@@ -5269,10 +5921,7 @@ process_select_popup_event :: proc(ctx: ^Context, event: ^Event) -> Error {
 		return .None
 	}
 	x, y, width, height, row_height := select_popup_geometry(ctx, field)
-	if event.x >= x &&
-	   event.x < x + width &&
-	   event.y >= y + 2 &&
-	   event.y < y + height - 1 {
+	if event.x >= x && event.x < x + width && event.y >= y + 2 && event.y < y + height - 1 {
 		selected := (event.y - y - 2) / row_height
 		field.selected_option = clamp(selected, 0, len(field.options) - 1)
 		((^int)(field.binding.data))^ = field.selected_option
@@ -5311,7 +5960,8 @@ move_text_cursor_to_mouse :: proc(ctx: ^Context, field: ^Form, mouse_x: int) {
 		width := 0
 		height, left, top: int
 		text := string(buffer.data[start:cursor])
-		if ctx.font_bounds(ctx.font, text, &width, &height, &left, &top) != .None || width > target {
+		if ctx.font_bounds(ctx.font, text, &width, &height, &left, &top) != .None ||
+		   width > target {
 			break
 		}
 		if cursor == len(buffer.data) {
@@ -5627,16 +6277,22 @@ text_allowed :: proc(filter: Text_Filter, existing: []u8, text: string) -> bool 
 }
 
 @(private = "file")
-begin_container_scrollbar_if_hit :: proc(ctx: ^Context, field: ^Form, mouse_x, mouse_y: int) -> bool {
+begin_container_scrollbar_if_hit :: proc(
+	ctx: ^Context,
+	field: ^Form,
+	mouse_x, mouse_y: int,
+) -> bool {
 	if field.source_height > 0 &&
 	   mouse_x >= field.content_x + field.content_width &&
 	   mouse_x < field.content_x + field.content_width + ctx.scrollbar_width &&
-	   mouse_y >= field.content_y && mouse_y < field.content_y + field.source_height {
+	   mouse_y >= field.content_y &&
+	   mouse_y < field.content_y + field.source_height {
 		begin_container_scrollbar(ctx, field, true, mouse_y)
 		return true
 	}
 	if field.source_width > 0 &&
-	   mouse_x >= field.content_x && mouse_x < field.content_x + field.source_width &&
+	   mouse_x >= field.content_x &&
+	   mouse_x < field.content_x + field.source_width &&
 	   mouse_y >= field.content_y + field.content_height &&
 	   mouse_y < field.content_y + field.content_height + ctx.scrollbar_height {
 		begin_container_scrollbar(ctx, field, false, mouse_x)
@@ -5646,7 +6302,12 @@ begin_container_scrollbar_if_hit :: proc(ctx: ^Context, field: ^Form, mouse_x, m
 }
 
 @(private = "file")
-begin_container_scrollbar :: proc(ctx: ^Context, field: ^Form, vertical: bool, mouse_position: int) {
+begin_container_scrollbar :: proc(
+	ctx: ^Context,
+	field: ^Form,
+	vertical: bool,
+	mouse_position: int,
+) {
 	size := field.source_width
 	maximum := field.minimum_width
 	current := field.offset_x
@@ -5838,8 +6499,14 @@ draw_beveled_rectangle :: proc(ctx: ^Context, x, y, width, height: int, light, c
 @(private = "file")
 blend_line_pixel :: proc(ctx: ^Context, x, y: int, color: u32, coverage: int) {
 	if coverage <= 0 ||
-	   x < ctx.clip_x0 || y < ctx.clip_y0 || x >= ctx.clip_x1 || y >= ctx.clip_y1 ||
-	   x < 0 || y < 0 || x >= ctx.screen.width || y >= ctx.screen.height {
+	   x < ctx.clip_x0 ||
+	   y < ctx.clip_y0 ||
+	   x >= ctx.clip_x1 ||
+	   y >= ctx.clip_y1 ||
+	   x < 0 ||
+	   y < 0 ||
+	   x >= ctx.screen.width ||
+	   y >= ctx.screen.height {
 		return
 	}
 	source_alpha := int(u8(color >> 24))
@@ -5888,7 +6555,13 @@ draw_antialiased_line :: proc(ctx: ^Context, start_x, start_y, end_x, end_y: int
 			}
 			neighbor_y := y + step_y
 			if previous_error + delta_y < 0xff0000 {
-				blend_line_pixel(ctx, x, neighbor_y, color, 255 - ((previous_error + delta_y) >> 16))
+				blend_line_pixel(
+					ctx,
+					x,
+					neighbor_y,
+					color,
+					255 - ((previous_error + delta_y) >> 16),
+				)
 			}
 			error -= delta_y
 			x += step_x
@@ -5899,7 +6572,13 @@ draw_antialiased_line :: proc(ctx: ^Context, start_x, start_y, end_x, end_y: int
 			}
 			neighbor_x := previous_x + step_x
 			if delta_x - previous_error < 0xff0000 {
-				blend_line_pixel(ctx, neighbor_x, y, color, 255 - ((delta_x - previous_error) >> 16))
+				blend_line_pixel(
+					ctx,
+					neighbor_x,
+					y,
+					color,
+					255 - ((delta_x - previous_error) >> 16),
+				)
 			}
 			error += delta_x
 			y += step_y
@@ -6040,8 +6719,14 @@ draw_font :: proc(
 
 @(private = "file")
 set_pixel :: proc(ctx: ^Context, x, y: int, color: u32) {
-	if x < ctx.clip_x0 || y < ctx.clip_y0 || x >= ctx.clip_x1 || y >= ctx.clip_y1 ||
-	   x < 0 || y < 0 || x >= ctx.screen.width || y >= ctx.screen.height {
+	if x < ctx.clip_x0 ||
+	   y < ctx.clip_y0 ||
+	   x >= ctx.clip_x1 ||
+	   y >= ctx.clip_y1 ||
+	   x < 0 ||
+	   y < 0 ||
+	   x >= ctx.screen.width ||
+	   y >= ctx.screen.height {
 		return
 	}
 	pixel := y * ctx.screen.pitch + x * 4
@@ -6055,8 +6740,14 @@ set_pixel :: proc(ctx: ^Context, x, y: int, color: u32) {
 blend_pixel :: proc(ctx: ^Context, x, y: int, color: u32) {
 	alpha := u32(u8(color >> 24))
 	if alpha == 0 ||
-	   x < ctx.clip_x0 || y < ctx.clip_y0 || x >= ctx.clip_x1 || y >= ctx.clip_y1 ||
-	   x < 0 || y < 0 || x >= ctx.screen.width || y >= ctx.screen.height {
+	   x < ctx.clip_x0 ||
+	   y < ctx.clip_y0 ||
+	   x >= ctx.clip_x1 ||
+	   y >= ctx.clip_y1 ||
+	   x < 0 ||
+	   y < 0 ||
+	   x >= ctx.screen.width ||
+	   y >= ctx.screen.height {
 		return
 	}
 	inverse := 255 - alpha
@@ -6065,6 +6756,22 @@ blend_pixel :: proc(ctx: ^Context, x, y: int, color: u32) {
 		source := u32(u8(color >> u32(channel * 8)))
 		destination := u32(ctx.screen.pixels[pixel + channel])
 		ctx.screen.pixels[pixel + channel] = u8((source * alpha + inverse * destination) >> 8)
+	}
+}
+
+@(private = "file")
+clear_rectangle :: proc(ctx: ^Context, x, y, width, height: int) {
+	x0 := clamp(x, ctx.clip_x0, ctx.clip_x1)
+	y0 := clamp(y, ctx.clip_y0, ctx.clip_y1)
+	x1 := clamp(x + width, ctx.clip_x0, ctx.clip_x1)
+	y1 := clamp(y + height, ctx.clip_y0, ctx.clip_y1)
+	for pixel_y in y0 ..< y1 {
+		for pixel_x in x0 ..< x1 {
+			pixel := pixel_y * ctx.screen.pitch + pixel_x * 4
+			for channel in 0 ..< 4 {
+				ctx.screen.pixels[pixel + channel] = 0
+			}
+		}
 	}
 }
 
