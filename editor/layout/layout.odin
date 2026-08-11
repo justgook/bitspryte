@@ -14,6 +14,25 @@ LEFT_PANEL_MIN_HEIGHT :: 32
 PANEL_GAP :: 4
 PANEL_LABEL_MIN_WIDTH :: 80
 PANEL_BACKGROUND_COLOR :: 0xff2d1e1e // #1E1E2D in SMGUI's little-endian RGBA format.
+TOOL_BUTTON_COUNT :: 12
+TOOL_BUTTON_SIZE :: 32
+TOOL_BUTTON_GAP :: 0
+TOOL_BUTTON_HORIZONTAL_PADDING :: 1
+TOOL_PANEL_TOP_PADDING :: 3
+TOOL_ICON_NAMES := [TOOL_BUTTON_COUNT]string {
+	"tool_rectangular_marquee",
+	"tool_pencil",
+	"tool_eraser",
+	"tool_eyedropper",
+	"tool_zoom",
+	"tool_move",
+	"tool_paint_bucket",
+	"tool_line",
+	"tool_rectangle",
+	"tool_contour",
+	"tool_blur",
+	"", // The text tool uses the Aseprite font instead of an atlas icon.
+}
 
 Panel_Config :: struct {
 	style:      ^smgui.Panel_Style,
@@ -26,6 +45,7 @@ Panel_Configs :: struct {
 	canvas_style:      ^smgui.Panel_Style,
 	palette_style:     ^smgui.Panel_Style,
 	color_wheel_style: ^smgui.Panel_Style,
+	tool_button_style: ^smgui.Panel_Style,
 	padding:           smgui.Panel_Padding,
 }
 
@@ -35,21 +55,26 @@ Canvas_Region :: struct {
 }
 
 Layout :: struct {
-	forms:                 [8]smgui.Form,
-	workspace_children:    [3]smgui.Form,
-	left_sidebar_children: [2]smgui.Form,
-	center_children:       [1]smgui.Form,
-	palette_children:      [1]smgui.Form,
-	color_wheel_children:  [1]smgui.Form,
-	home_requested:        bool,
-	clear_requested:       bool,
-	left_sidebar_width:    int,
-	palette_panel_height:  int,
-	resizing_left_sidebar: bool,
-	resizing_left_panels:  bool,
+	forms:                  [8]smgui.Form,
+	workspace_children:     [3]smgui.Form,
+	left_sidebar_children:  [2]smgui.Form,
+	center_children:        [1]smgui.Form,
+	palette_children:       [1]smgui.Form,
+	color_wheel_children:   [1]smgui.Form,
+	right_sidebar_children: [TOOL_BUTTON_COUNT + 1]smgui.Form,
+	tool_icons:             [TOOL_BUTTON_COUNT]smgui.Image,
+	active_tool:            int,
+	tool_scale:             int,
+	right_sidebar_width:    int,
+	home_requested:         bool,
+	clear_requested:        bool,
+	left_sidebar_width:     int,
+	palette_panel_height:   int,
+	resizing_left_sidebar:  bool,
+	resizing_left_panels:   bool,
 }
 
-TEXTS := [?]string{"BitSpryte", "BitSpryte", "Home", "Clear", "", "Palette", "Color Wheel"}
+TEXTS := [?]string{"BitSpryte", "BitSpryte", "Home", "Clear", "", "Palette", "Color Wheel", "T"}
 
 canvas_status_text :: proc(
 	buffer: []u8,
@@ -63,16 +88,50 @@ canvas_status_text :: proc(
 	return fmt.bprintf(buffer, "+ -- --    [] %d %d", canvas_width, canvas_height)
 }
 
-init :: proc(layout: ^Layout, width, height: int, panels: Panel_Configs = {}) {
+init :: proc(layout: ^Layout, width, height: int, panels: Panel_Configs = {}, tool_icons: []smgui.Image = nil) {
 	assert(layout != nil)
 	layout^ = {
-		left_sidebar_width = LEFT_SIDEBAR_DEFAULT_WIDTH,
+		left_sidebar_width  = LEFT_SIDEBAR_DEFAULT_WIDTH,
+		tool_scale          = 1,
+		right_sidebar_width = RIGHT_SIDEBAR_WIDTH,
 	}
+	for icon in tool_icons {
+		if icon.width > 0 {
+			layout.tool_scale = max(layout.tool_scale, (icon.width + 15) / 16)
+		}
+	}
+	button_width := TOOL_BUTTON_SIZE
+	layout.right_sidebar_width = RIGHT_SIDEBAR_WIDTH
 	// Empty Custom Form retains Canvas Region geometry; the transparent Panel
 	// clears its full framed interior before this child is visited.
 	layout.center_children = {{kind = .Custom}}
 	layout.palette_children = {{kind = .Label, label = 5}}
 	layout.color_wheel_children = {{kind = .Label, label = 6}}
+	layout.right_sidebar_children[0] = {
+		kind = .Custom,
+		custom = {view = draw_background},
+	}
+	for index in 0 ..< TOOL_BUTTON_COUNT {
+		if index < len(tool_icons) {
+			layout.tool_icons[index] = tool_icons[index]
+		}
+		button := &layout.right_sidebar_children[index + 1]
+		button^ = {
+			kind                      = .Button,
+			width                     = button_width,
+			height                    = TOOL_BUTTON_SIZE,
+			value                     = index,
+			button_horizontal_padding = TOOL_BUTTON_HORIZONTAL_PADDING,
+			button_fixed_size         = true,
+			button_style              = panels.tool_button_style,
+		}
+		if index == TOOL_BUTTON_COUNT - 1 {
+			button.label = 7
+		} else {
+			button.icon = &layout.tool_icons[index]
+		}
+		button.binding = smgui.bind(&layout.active_tool)
+	}
 	layout.left_sidebar_children = {
 		panel(
 			layout.palette_children[:],
@@ -103,7 +162,7 @@ init :: proc(layout: ^Layout, width, height: int, panels: Panel_Configs = {}) {
 
 		// Workspace parent, fixed right sidebar, and footer.
 		{kind = .Division, children = layout.workspace_children[:]},
-		{kind = .Custom, custom = {view = draw_background}},
+		{kind = .Division, children = layout.right_sidebar_children[:]},
 		{kind = .Custom, custom = {view = draw_background}},
 		{kind = .Label, label = 4},
 	}
@@ -126,7 +185,7 @@ panel :: proc(children: []smgui.Form, config: Panel_Config = {}) -> smgui.Form {
 resize :: proc(layout: ^Layout, width, height: int) {
 	assert(layout != nil)
 	working_height := max(height - TOP_HEIGHT - FOOTER_HEIGHT, 0)
-	max_left_width := max(width - RIGHT_SIDEBAR_WIDTH - MIN_CANVAS_REGION_WIDTH, 0)
+	max_left_width := max(width - layout.right_sidebar_width - MIN_CANVAS_REGION_WIDTH, 0)
 	minimum := min(LEFT_SIDEBAR_MIN_WIDTH, max_left_width)
 	layout.left_sidebar_width = clamp(layout.left_sidebar_width, minimum, max_left_width)
 
@@ -138,7 +197,7 @@ resize :: proc(layout: ^Layout, width, height: int) {
 	layout.forms[3].x = smgui.absolute(184)
 	layout.forms[3].y = smgui.absolute(5)
 
-	workspace_width := max(width - RIGHT_SIDEBAR_WIDTH, 0)
+	workspace_width := max(width - layout.right_sidebar_width, 0)
 	set_rect(&layout.forms[4], 0, TOP_HEIGHT, workspace_width, working_height)
 	set_rect(&layout.workspace_children[0], 0, 0, workspace_width, working_height)
 	set_rect(&layout.workspace_children[1], 0, 0, layout.left_sidebar_width, working_height)
@@ -185,13 +244,22 @@ resize :: proc(layout: ^Layout, width, height: int) {
 	set_form_visible(&layout.palette_children[0], show_panel_labels)
 	set_form_visible(&layout.color_wheel_children[0], show_panel_labels)
 
+	right_sidebar_width := min(layout.right_sidebar_width, width)
 	set_rect(
 		&layout.forms[5],
-		max(width - RIGHT_SIDEBAR_WIDTH, 0),
+		max(width - layout.right_sidebar_width, 0),
 		TOP_HEIGHT,
-		min(RIGHT_SIDEBAR_WIDTH, width),
+		right_sidebar_width,
 		working_height,
 	)
+	set_rect(&layout.right_sidebar_children[0], 0, 0, right_sidebar_width, working_height)
+	button_width := layout.right_sidebar_children[1].width
+	button_height := layout.right_sidebar_children[1].height
+	for index in 0 ..< TOOL_BUTTON_COUNT {
+		button := &layout.right_sidebar_children[index + 1]
+		button.x = smgui.absolute((right_sidebar_width - button_width) / 2)
+		button.y = smgui.absolute(TOOL_PANEL_TOP_PADDING + index * (button_height + TOOL_BUTTON_GAP))
+	}
 	footer_y := max(height - FOOTER_HEIGHT, TOP_HEIGHT)
 	set_rect(&layout.forms[6], 0, footer_y, width, FOOTER_HEIGHT)
 	layout.forms[7].x = smgui.absolute(10)

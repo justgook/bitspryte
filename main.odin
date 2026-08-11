@@ -58,7 +58,10 @@ gui_host: smgui_host.State
 gui_layout: editor_layout.Layout
 gui_font: spritesheet.Font
 gui_style_atlas: mocha.Style_Atlas
+gui_icon_atlas: mocha.Icon_Atlas
 gui_panel_style: smgui.Panel_Style
+gui_tool_button_style: smgui.Panel_Style
+gui_tool_icons: [editor_layout.TOOL_BUTTON_COUNT]smgui.Image
 footer_status_buffer: [64]u8
 
 sync_layout_size :: proc() {
@@ -163,6 +166,26 @@ init :: proc "c" () {
 	panel_style, panel_style_found := mocha.style_pair(&gui_style_atlas, "editor_normal", "editor_selected")
 	if !panel_style_found {panic("Catppuccin Panel style is missing")}
 	gui_panel_style = panel_style
+	tool_button_style, tool_button_style_found := mocha.style_pair(
+		&gui_style_atlas,
+		"buttonset_item_focused",
+		"buttonset_item_hot",
+	)
+	if !tool_button_style_found {panic("Catppuccin tool Button style is missing")}
+	gui_tool_button_style = tool_button_style
+	icon_atlas, icon_error := mocha.load_icon_atlas(UI_GRAPHICS_SCALE)
+	if icon_error != .None {panic("failed to load Catppuccin tool icons")}
+	gui_icon_atlas = icon_atlas
+	for name, index in editor_layout.TOOL_ICON_NAMES {
+		if len(name) == 0 {
+			continue
+		}
+		icon_index, icon_found := mocha.find_icon(name)
+		if !icon_found {panic("Catppuccin tool icon is missing")}
+		icon, icon_valid := mocha.icon(&gui_icon_atlas, icon_index)
+		if !icon_valid {panic("failed to extract Catppuccin tool icon")}
+		gui_tool_icons[index] = icon
+	}
 	update_footer_status(false)
 	editor_layout.init(
 		&gui_layout,
@@ -172,8 +195,10 @@ init :: proc "c" () {
 			canvas_style = &gui_panel_style,
 			palette_style = &gui_panel_style,
 			color_wheel_style = &gui_panel_style,
+			tool_button_style = &gui_tool_button_style,
 			padding = {left = 2, top = 2, right = 2, bottom = 2},
 		},
+		gui_tool_icons[:],
 	)
 	if error := smgui.init(
 		&gui_context,
@@ -272,6 +297,7 @@ cleanup :: proc "c" () {
 	_ = smgui.deinit(&gui_context)
 	spritesheet.deinit(&gui_font)
 	mocha.style_atlas_deinit(&gui_style_atlas)
+	mocha.icon_atlas_deinit(&gui_icon_atlas)
 	compositor.shutdown(&texture_compositor)
 	overlay.deinit(&preview_overlay)
 	cpu_framebuffer.deinit(&canvas)

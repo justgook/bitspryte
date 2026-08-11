@@ -77,7 +77,7 @@ center_canvas_and_left_placeholders_use_smgui_panel_containers :: proc(t: ^testi
 
 @(test)
 workspace_panels_select_styles_independently_and_share_padding :: proc(t: ^testing.T) {
-	canvas_style, palette_style, color_wheel_style: smgui.Panel_Style
+	canvas_style, palette_style, color_wheel_style, tool_button_style: smgui.Panel_Style
 	padding := smgui.Panel_Padding {
 		left   = 1,
 		top    = 2,
@@ -93,6 +93,7 @@ workspace_panels_select_styles_independently_and_share_padding :: proc(t: ^testi
 			canvas_style = &canvas_style,
 			palette_style = &palette_style,
 			color_wheel_style = &color_wheel_style,
+			tool_button_style = &tool_button_style,
 			padding = padding,
 		},
 	)
@@ -113,6 +114,87 @@ workspace_panels_select_styles_independently_and_share_padding :: proc(t: ^testi
 	testing.expect_value(t, palette_panel.panel_background, u32(layout.PANEL_BACKGROUND_COLOR))
 	testing.expect_value(t, color_wheel_panel.panel_content, smgui.Panel_Content.Styled)
 	testing.expect_value(t, color_wheel_panel.panel_background, u32(layout.PANEL_BACKGROUND_COLOR))
+	for index in 1 ..= layout.TOOL_BUTTON_COUNT {
+		testing.expect(t, shell.right_sidebar_children[index].button_style == &tool_button_style)
+	}
+}
+
+@(test)
+right_sidebar_tool_icon_order_matches_editor_tools :: proc(t: ^testing.T) {
+	expected := [layout.TOOL_BUTTON_COUNT]string {
+		"tool_rectangular_marquee",
+		"tool_pencil",
+		"tool_eraser",
+		"tool_eyedropper",
+		"tool_zoom",
+		"tool_move",
+		"tool_paint_bucket",
+		"tool_line",
+		"tool_rectangle",
+		"tool_contour",
+		"tool_blur",
+		"",
+	}
+	testing.expect_value(t, layout.TOOL_ICON_NAMES, expected)
+}
+
+@(test)
+right_sidebar_contains_icon_tool_buttons_with_exclusive_active_binding :: proc(t: ^testing.T) {
+	icons: [layout.TOOL_BUTTON_COUNT]smgui.Image
+	for index in 0 ..< layout.TOOL_BUTTON_COUNT - 1 {
+		icons[index] = {
+			width  = 8,
+			height = 8,
+		}
+	}
+	shell: layout.Layout
+	layout.init(&shell, 960, 720, {}, icons[:])
+
+	testing.expect_value(t, shell.forms[5].kind, smgui.Field_Kind.Division)
+	testing.expect_value(t, shell.right_sidebar_children[0].kind, smgui.Field_Kind.Custom)
+	for index in 0 ..< layout.TOOL_BUTTON_COUNT {
+		button := &shell.right_sidebar_children[index + 1]
+		testing.expect_value(t, button.kind, smgui.Field_Kind.Button)
+		testing.expect_value(t, button.value, index)
+		testing.expect_value(t, button.width, layout.TOOL_BUTTON_SIZE)
+		testing.expect_value(t, button.height, layout.TOOL_BUTTON_SIZE)
+		testing.expect(t, button.button_fixed_size)
+		testing.expect_value(
+			t,
+			int(button.y.value),
+			layout.TOOL_PANEL_TOP_PADDING + index * (layout.TOOL_BUTTON_SIZE + layout.TOOL_BUTTON_GAP),
+		)
+		testing.expect(t, button.binding.data == &shell.active_tool)
+	}
+	testing.expect(t, shell.right_sidebar_children[1].icon == &shell.tool_icons[0])
+	testing.expect_value(t, shell.right_sidebar_children[layout.TOOL_BUTTON_COUNT].label, 7)
+	testing.expect_value(t, shell.active_tool, 0)
+}
+
+@(test)
+scaled_tool_icons_keep_fixed_padding_inside_buttons_and_sidebar :: proc(t: ^testing.T) {
+	icons: [layout.TOOL_BUTTON_COUNT]smgui.Image
+	for index in 0 ..< layout.TOOL_BUTTON_COUNT - 1 {
+		icons[index] = {
+			width  = 32,
+			height = 32,
+		}
+	}
+	shell: layout.Layout
+	layout.init(&shell, 960, 720, {}, icons[:])
+
+	button := &shell.right_sidebar_children[1]
+	testing.expect_value(t, shell.tool_scale, 2)
+	testing.expect_value(t, button.width, 32)
+	testing.expect_value(t, button.height, 32)
+	testing.expect_value(t, shell.right_sidebar_width, 32)
+	testing.expect_value(t, int(button.x.value), 0)
+	testing.expect_value(t, int(button.y.value), layout.TOOL_PANEL_TOP_PADDING)
+	testing.expect_value(
+		t,
+		int(shell.right_sidebar_children[2].y.value),
+		layout.TOOL_PANEL_TOP_PADDING + button.height + layout.TOOL_BUTTON_GAP,
+	)
 }
 
 @(test)

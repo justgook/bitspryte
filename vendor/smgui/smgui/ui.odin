@@ -474,55 +474,58 @@ Custom_Widget :: struct {
 }
 
 Form :: struct {
-	kind:                 Field_Kind,
-	horizontal_alignment: Horizontal_Alignment,
-	vertical_alignment:   Vertical_Alignment,
-	flags:                Form_Flags,
-	x, y:                 Position,
-	width, height:        int,
-	width_percentage:     int,
-	height_percentage:    int,
-	margin:               int,
-	pitch:                int,
-	left, top:            int,
-	description:          int,
-	computed_x:           int,
-	computed_y:           int,
-	computed_width:       int,
-	computed_height:      int,
-	content_x:            int,
-	content_y:            int,
-	content_width:        int,
-	content_height:       int,
-	binding:              Binding,
-	minimum:              i64,
-	maximum:              i64,
-	increment:            i64,
-	max_length:           int,
-	filter:               Text_Filter,
-	float_minimum:        f32,
-	float_maximum:        f32,
-	float_increment:      f32,
-	icon:                 ^Image,
-	value:                int,
-	label:                int,
-	text:                 string,
-	offset_x, offset_y:   int,
-	minimum_width:        int,
-	minimum_height:       int,
-	source_width:         int,
-	source_height:        int,
-	foreground:           u32,
-	background:           u32,
-	custom:               Custom_Widget,
-	options:              []string,
-	selected_option:      int,
-	points:               []i16,
-	children:             []Form,
-	panel_style:          ^Panel_Style,
-	panel_padding:        Panel_Padding,
-	panel_content:        Panel_Content,
-	panel_background:     u32,
+	kind:                      Field_Kind,
+	horizontal_alignment:      Horizontal_Alignment,
+	vertical_alignment:        Vertical_Alignment,
+	flags:                     Form_Flags,
+	x, y:                      Position,
+	width, height:             int,
+	width_percentage:          int,
+	height_percentage:         int,
+	margin:                    int,
+	pitch:                     int,
+	left, top:                 int,
+	description:               int,
+	computed_x:                int,
+	computed_y:                int,
+	computed_width:            int,
+	computed_height:           int,
+	content_x:                 int,
+	content_y:                 int,
+	content_width:             int,
+	content_height:            int,
+	binding:                   Binding,
+	minimum:                   i64,
+	maximum:                   i64,
+	increment:                 i64,
+	max_length:                int,
+	filter:                    Text_Filter,
+	float_minimum:             f32,
+	float_maximum:             f32,
+	float_increment:           f32,
+	icon:                      ^Image,
+	value:                     int,
+	label:                     int,
+	text:                      string,
+	offset_x, offset_y:        int,
+	minimum_width:             int,
+	minimum_height:            int,
+	source_width:              int,
+	source_height:             int,
+	foreground:                u32,
+	background:                u32,
+	custom:                    Custom_Widget,
+	options:                   []string,
+	selected_option:           int,
+	points:                    []i16,
+	children:                  []Form,
+	panel_style:               ^Panel_Style,
+	panel_padding:             Panel_Padding,
+	panel_content:             Panel_Content,
+	panel_background:          u32,
+	button_horizontal_padding: int,
+	button_fixed_size:         bool,
+	button_style:              ^Panel_Style,
 }
 
 Backend_Init_Proc :: #type proc(
@@ -1710,7 +1713,11 @@ measure_form :: proc(
 			text_width += field.icon.width
 			text_height = max(text_height, field.icon.height)
 		}
-		intrinsic_width := text_width + 8 + int(field.minimum)
+		horizontal_padding := field.button_horizontal_padding
+		if horizontal_padding < 1 {
+			horizontal_padding = 4
+		}
+		intrinsic_width := text_width + 2 * horizontal_padding + int(field.minimum)
 		intrinsic_height := text_height + 4
 		if image_valid(&ctx.skin[int(Skin_Image.Button_Normal_Middle)]) {
 			left_skin := &ctx.skin[int(Skin_Image.Button_Normal_Left)]
@@ -1722,8 +1729,12 @@ measure_form :: proc(
 				max(left_skin.height, max(middle_skin.height, right_skin.height)),
 			)
 		}
-		width = max(width, intrinsic_width)
-		height = max(height, intrinsic_height)
+		if !field.button_fixed_size || width < 1 {
+			width = max(width, intrinsic_width)
+		}
+		if !field.button_fixed_size || height < 1 {
+			height = max(height, intrinsic_height)
+		}
 	case .Icon_Button:
 		if image_valid(field.icon) {
 			width = max(width, field.icon.width)
@@ -3413,7 +3424,15 @@ draw_button :: proc(ctx: ^Context, field: ^Form) -> Error {
 	left_skin := &ctx.skin[int(skin_state)]
 	middle_skin := &ctx.skin[int(skin_state) + 1]
 	right_skin := &ctx.skin[int(skin_state) + 2]
-	skinned := image_valid(middle_skin)
+	custom_slice: ^Nine_Slice
+	if field.button_style != nil {
+		custom_slice = &field.button_style.normal
+		if hovered || pressed {
+			custom_slice = &field.button_style.focused
+		}
+	}
+	custom_skinned := custom_slice != nil
+	skinned := custom_skinned || image_valid(middle_skin)
 	if !skinned && .No_Border not_in field.flags {
 		for border_x in x - 1 ..< min(x + width, ctx.screen.width - 1) {
 			blend_pixel(ctx, border_x, y - 1, outer)
@@ -3426,7 +3445,11 @@ draw_button :: proc(ctx: ^Context, field: ^Form) -> Error {
 			blend_pixel(ctx, x + width, border_y, outer)
 		}
 	}
-	if skinned {
+	if custom_skinned {
+		if error := draw_nine_slice(ctx, x, y, width, height, custom_slice, true); error != .None {
+			return error
+		}
+	} else if skinned {
 		blit_tiled_image(
 			ctx,
 			x,
